@@ -1,16 +1,22 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
+    gitignore = {
+      url = "github:hercules-ci/gitignore.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     crane = {
       url = "github:ipetkov/crane";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs = {
     self,
     nixpkgs,
+    gitignore,
     crane,
     flake-utils,
     ...
@@ -36,7 +42,6 @@
         inherit src nativeBuildInputs buildInputs;
         pname = "ratings";
         version = "0.1.0";
-        # strictDeps = true;
       };
 
       # Build *just* the cargo dependencies, so we can reuse
@@ -59,14 +64,46 @@
             export SQLX_OFFLINE_DIR=${craneLib.path ./.sqlx}
           '';
         });
+
+      frontendNodeDependencies = (pkgs.callPackage ./frontend/default.nix {}).nodeDependencies;
+      frontend = pkgs.stdenv.mkDerivation {
+        name = "frontend";
+        src = ./frontend;
+        buildInputs = [pkgs.nodejs];
+        buildPhase = ''
+          ln -s ${frontendNodeDependencies}/lib/node_modules ./node_modules
+          export PATH="${frontendNodeDependencies}/bin:$PATH"
+
+          npm run build
+
+          mkdir -p $out/build
+          cp -r build $out/
+
+          cp -r ./package*.json $out/
+          cp -r ./node_modules $out/
+        '';
+      };
     in {
       checks = {
         # Build the crate as part of `nix flake check` for convenience
         inherit ratings;
       };
       packages = {
-        default = ratings;
-        inherit ratings;
+        inherit ratings frontend;
+
+        default = pkgs.stdenv.mkDerivation {
+          name = "ratings";
+          src = gitignore.lib.gitignoreSource ./.;
+          buildInputs = [ratings frontend];
+
+          buildPhase = "true";
+
+          installPhase = ''
+            mkdir -p $out/backend $out/frontend
+            cp -r ${ratings}/* $out/backend/
+            cp -r ${frontend}/* $out/frontend/
+          '';
+        };
       };
       devShells.default = craneLib.devShell {
         # Inherit inputs from checks.

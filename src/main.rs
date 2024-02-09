@@ -58,6 +58,7 @@ fn configure_cors() -> Cors {
     if cfg!(debug_assertions) {
         cors.allowed_origin("http://localhost:5173")
             .allowed_origin("http://localhost:4173")
+            .allowed_origin("http://localhost:3000")
     } else {
         cors
     }
