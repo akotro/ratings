@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO ip_blacklist (ip_address) VALUES (?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "7d42d1589fdcca5b0ec4804bf1886c8612830e31a5f10cae245984a5f06320b6"
+}

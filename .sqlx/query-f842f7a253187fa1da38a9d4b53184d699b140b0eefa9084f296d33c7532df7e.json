@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT AVG(score) FROM ratings WHERE restaurant_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "AVG(score)",
+        "type_info": {
+          "type": "Double",
+          "flags": "BINARY",
+          "char_set": 63,
+          "max_size": 16
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f842f7a253187fa1da38a9d4b53184d699b140b0eefa9084f296d33c7532df7e"
+}

@@ -1,0 +1,6 @@
+[workspace]
+
+name = "ratings"
+version = "0.1.0"
+
+members = ["server", "shared"]

@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        SELECT\n            (SELECT COUNT(*) FROM users) =\n            (SELECT COUNT(*) FROM ratings WHERE restaurant_id = ?) AS is_complete\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_complete",
+        "type_info": {
+          "type": "Long",
+          "flags": "BINARY",
+          "char_set": 63,
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "21b5e5441bc01235e16ffd64aa643df9121a3889cb2c9fb7d03174129373edb7"
+}

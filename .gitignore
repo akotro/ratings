@@ -1,0 +1,10 @@
+/target
+/resources
+
+# nix
+result*
+
+### direnv ###
+.direnv
+.envrc
+.env

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM restaurants WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "6c6fce14dba598a0f4cda2908879fc91bfeaa8ba6dc897c1a4ff6dd939b24ccc"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM ip_blacklist WHERE ip_address = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "d9d5249f27d25fc525857d01cf5223631dd4da20d6d2df2b4ba35bf8f6b98b45"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM menu_items WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "018d70f5157fc2c0ff0cac0f02a2ad39eeae3a54e529cee82f100ade9fb6e66f"
+}
