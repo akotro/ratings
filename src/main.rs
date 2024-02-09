@@ -1,6 +1,7 @@
 mod auth;
 mod db_models;
 mod db_util;
+mod models;
 mod routes;
 
 use std::{

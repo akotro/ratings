@@ -10,10 +10,9 @@ use argon2::{
     Argon2, PasswordHash, PasswordHasher, PasswordVerifier,
 };
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
-use shared::models::UserClaims;
 use sqlx::MySqlPool;
 
-use crate::db_util;
+use crate::{db_util, models::UserClaims};
 
 pub fn generate_password_hash(password: String) -> Result<String, argon2::password_hash::Error> {
     let argon2 = Argon2::default();

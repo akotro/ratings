@@ -1,9 +1,8 @@
 use actix_web::{delete, get, post, put, web, HttpRequest, HttpResponse};
-use shared::models::*;
 use sqlx::MySqlPool;
 use uuid::Uuid;
 
-use crate::{auth::*, db_models::*, db_util::*};
+use crate::{auth::*, db_models::*, db_util::*, models::*};
 
 #[post("/register")]
 async fn register_user_route(

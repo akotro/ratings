@@ -4,7 +4,6 @@ use std::{cmp::Ordering, env};
 
 use anyhow::{anyhow, Error, Ok, Result};
 use dotenvy::dotenv;
-use shared::models::*;
 use sqlx::{
     migrate,
     mysql::{MySqlPoolOptions, MySqlQueryResult},
@@ -12,7 +11,7 @@ use sqlx::{
     query, query_as, Acquire, MySql, MySqlConnection, MySqlExecutor, MySqlPool, Row,
 };
 
-use crate::db_models::*;
+use crate::{db_models::*, models::*};
 
 // NOTE:(akotro) Database
 
