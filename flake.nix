@@ -105,15 +105,14 @@
           '';
         };
       };
-      devShells.default = craneLib.devShell {
-        # Inherit inputs from checks.
-        checks = self.checks.${system};
+      # devShells.default = craneLib.devShell {
+      # checks = self.checks.${system};
+      # Additional dev-shell environment variables can be set directly
+      # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
 
-        # Additional dev-shell environment variables can be set directly
-        # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
+      # RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 
-        RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
-        # Extra inputs can be added here; cargo and rustc are provided by default.
+      devShells.default = pkgs.mkShell {
         packages = [
           pkgs.nil
           pkgs.sqlx-cli

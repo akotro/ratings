@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::{cmp::Ordering, env};
+use std::{cmp::Ordering, env, result::Result::Ok};
 
-use anyhow::{anyhow, Error, Ok, Result};
+use anyhow::{anyhow, Error, Result};
 use dotenvy::dotenv;
 use sqlx::{
     migrate,
@@ -67,8 +67,11 @@ pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
 }
 
 pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Result<User> {
-    let existing_user = get_user_by_credentials(conn, &new_user.username).await;
+    let mut tx = conn.begin().await?;
+
+    let existing_user = get_user_by_credentials(&mut tx, &new_user.username).await;
     if existing_user.is_ok_and(|u| u.is_some()) {
+        tx.rollback().await?;
         return Err(anyhow!(
             "User already exists with username: {}",
             new_user.username
@@ -82,15 +85,31 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
         new_user.username,
         new_user.password
     );
-    let result = query.execute(conn).await?;
+    let result = match query.execute(&mut *tx).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not create user: {err}"));
+        }
+    };
 
     if result.rows_affected() == 1 {
-        let last_insert_id = result.last_insert_id();
+        let db_user = match get_user_by_credentials(&mut tx, &new_user.username.clone()).await {
+            Ok(Some(user)) => user,
+            Ok(None) => {
+                tx.rollback().await?;
+                return Err(anyhow!("Could not get db_user"));
+            }
+            Err(err) => {
+                tx.rollback().await?;
+                return Err(anyhow!("Could not get db_user: {err}"));
+            }
+        };
 
         Ok(User {
-            id: last_insert_id.to_string(),
-            username: new_user.username.clone(),
-            password: new_user.password.clone(),
+            id: db_user.id,
+            username: db_user.username,
+            password: db_user.password,
             token: String::new(),
             ratings: Vec::<Rating>::new(),
         })
@@ -115,6 +134,7 @@ pub async fn get_user_by_credentials(
     match db_user {
         Some(db_user) => {
             let ratings = get_ratings_by_user(&mut tx, &db_user.id).await?;
+            tx.commit().await?;
             Ok(Some(User {
                 id: db_user.id,
                 token: String::new(),
@@ -123,7 +143,10 @@ pub async fn get_user_by_credentials(
                 ratings,
             }))
         }
-        None => Err(anyhow!("User not found")),
+        None => {
+            tx.rollback().await?;
+            Err(anyhow!("User not found"))
+        }
     }
 }
 
@@ -252,6 +275,8 @@ pub async fn get_avg_rating(
 pub async fn get_restaurants_with_avg_rating(
     conn: &mut MySqlConnection,
 ) -> Result<Vec<(Restaurant, f64)>> {
+    // TODO: These are too many requests, migrate some of this logic to sql
+
     let mut tx = Acquire::begin(conn).await?;
 
     let db_restaurants_result =
@@ -482,10 +507,27 @@ pub async fn is_restaurant_rated_by_all_users(
 ) -> Result<bool> {
     let mut tx = conn.begin().await?;
 
-    let db_users = query_as!(DbUser, "SELECT id, username, password FROM users")
+    let db_users = match query_as!(DbUser, "SELECT id, username, password FROM users")
         .fetch_all(&mut *tx)
-        .await?;
-    let ratings = get_ratings_by_restaurant(&mut tx, restaurant_id).await?;
+        .await
+    {
+        Ok(db_users) => db_users,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not get users: {err}"));
+        }
+    };
+
+    let ratings_result = get_ratings_by_restaurant(&mut tx, restaurant_id).await;
+    let ratings = match ratings_result {
+        Ok(ratings) => ratings,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not get ratings: {err}"));
+        }
+    };
+
+    tx.commit().await?;
 
     Ok(db_users.len() == ratings.len())
 }

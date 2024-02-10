@@ -3,6 +3,7 @@ import { env } from '$env/dynamic/public';
 export const API_BASE_URL = env.PUBLIC_API_BASE_URL;
 
 export const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
+export const REGISTER_ENDPOINT = `${API_BASE_URL}/auth/register`;
 export const RESTAURANTS_ENDPOINT = `${API_BASE_URL}/restaurants`;
 export const RESTAURANTS_WITH_AVG_RATING_ENDPOINT = `${API_BASE_URL}/restaurants_with_avg_rating`;
 export function RESTAURANT_RATING_COMPLETE_ENDPOINT(restaurantId: string) {

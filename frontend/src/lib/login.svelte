@@ -1,15 +1,18 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import { user } from './store';
-  import { LOGIN_ENDPOINT } from './endpoints';
+  import { LOGIN_ENDPOINT, REGISTER_ENDPOINT } from './endpoints'; // Assuming you have a REGISTER_ENDPOINT
   import Loading from './loading.svelte';
   import axios from 'axios';
   import { setTokenCookie, deleteTokenCookie, readTokenCookie } from './auth';
 
   let username = '';
   let password = '';
+  let confirmPassword = '';
   let loginLoading = false;
   let loginFailed = false;
+  let passwordsMatchError = false;
+  let registration = false;
 
   let checkingAuth = true;
   onMount(() => {
@@ -25,31 +28,48 @@
 
   async function login() {
     loginFailed = false;
-    loginLoading = true;
-    try {
-      const response = await axios.post(LOGIN_ENDPOINT, {
-        id: '',
-        username,
-        password
-      });
+    passwordsMatchError = false;
 
-      const data = response.data;
-      if (data.success && data.data) {
-        loginFailed = false;
-        $user = data.data;
-        dispatch('login', data.data);
-        setTokenCookie(data.data.token);
+    if (registration) {
+      if (password !== confirmPassword) {
+        passwordsMatchError = true;
+        return;
+      }
 
-        username = '';
-        password = '';
-      } else {
+      try {
+        loginLoading = true;
+        const response = await axios.post(REGISTER_ENDPOINT, { id: '', username, password });
+        const data = response.data;
+        if (data.success && data.data) {
+          $user = data.data;
+          dispatch('login', data.data);
+          setTokenCookie(data.data.token);
+          username = '';
+          password = '';
+        } else {
+          loginFailed = true;
+        }
+      } catch (error) {
         loginFailed = true;
       }
-    } catch (error) {
-      // console.log('Login error: ' + error);
-      loginFailed = true;
+    } else {
+      try {
+        loginLoading = true;
+        const response = await axios.post(LOGIN_ENDPOINT, { id: '', username, password });
+        const data = response.data;
+        if (data.success && data.data) {
+          $user = data.data;
+          dispatch('login', data.data);
+          setTokenCookie(data.data.token);
+          username = '';
+          password = '';
+        } else {
+          loginFailed = true;
+        }
+      } catch (error) {
+        loginFailed = true;
+      }
     }
-
     loginLoading = false;
   }
 
@@ -57,12 +77,15 @@
     $user = null;
     deleteTokenCookie();
   }
+
+  function toggleRegistration() {
+    registration = !registration;
+    passwordsMatchError = false; // Reset this when toggling registration to ensure it starts clean
+  }
 </script>
 
 {#if checkingAuth}
-  <!-- <div class="flex items-center justify-center my-12"> -->
-  <!--   <Loading /> -->
-  <!-- </div> -->
+  <!-- Auth checking UI -->
 {:else if $user && $user.token.length > 0}
   <div class="flex flex-col items-center">
     <h3 class="p-6 h3 text-white text-center">
@@ -88,16 +111,37 @@
       <span class="text-xl">Password</span>
       <input class="input" type="password" bind:value={password} />
     </label>
+    {#if registration}
+      <label class="label">
+        <span class="text-xl">Confirm Password</span>
+        <input class="input" type="password" bind:value={confirmPassword} />
+      </label>
+    {/if}
+    {#if passwordsMatchError}
+      <p class="text-red-500">Passwords do not match. Please try again.</p>
+    {/if}
     <br />
     {#if loginLoading}
-      <button class="btn btn-lg variant-filled-surface">
-        <Loading />Loading
+      <button class="btn btn-lg variant-filled-surface" disabled>
+        <Loading />
+        {registration ? 'Registering' : 'Loading'}
       </button>
     {:else}
-      <button class="btn btn-lg variant-filled-surface" type="submit"> Login </button>
+      <button class="btn btn-lg variant-filled-surface" type="submit">
+        {registration ? 'Register' : 'Login'}
+      </button>
     {/if}
     {#if loginFailed}
-      <p class="text-red-500">Login failed. Please try again.</p>
+      <p class="text-red-500">Operation failed. Please try again.</p>
     {/if}
+    <br />
+    <br />
+    <a href="./" on:click={toggleRegistration} class="cursor-pointer text-blue-500 mt-4">
+      {#if registration}
+        Already have an account? Login
+      {:else}
+        Don't have an account? Register
+      {/if}
+    </a>
   </form>
 {/if}
