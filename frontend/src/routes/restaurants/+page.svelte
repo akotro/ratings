@@ -39,10 +39,14 @@
 <div class="flex flex-col items-center justify-center">
   <h1 class="text-center text-6xl my-4">Restaurants</h1>
   {#if checkingAuth}
-    <Loading />
+    <!-- <div class="flex items-center justify-center my-12"> -->
+    <!--   <Loading /> -->
+    <!-- </div> -->
   {:else if $user}
     {#await get_restaurants($user.token)}
-      <Loading />
+      <!-- <div class="flex items-center justify-center my-12"> -->
+      <!--   <Loading /> -->
+      <!-- </div> -->
     {:then}
       <nav class="list-nav">
         <!-- (optionally you can provide a label here) -->

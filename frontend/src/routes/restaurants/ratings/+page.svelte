@@ -53,14 +53,14 @@
 <div class="flex-col items-center justify-center mx-auto max-w-7xl">
   <h1 class="text-center text-6xl my-4">Your Ratings</h1>
   {#if checkingAuth}
-    <div class="flex items-center justify-center">
-      <Loading />
-    </div>
+    <!-- <div class="flex items-center justify-center"> -->
+    <!--   <Loading /> -->
+    <!-- </div> -->
   {:else if $user && $user.token.length > 0}
     {#await get_ratings($user.id, $user.token)}
-      <div class="flex items-center justify-center">
-        <Loading />
-      </div>
+      <!-- <div class="flex items-center justify-center"> -->
+      <!--   <Loading /> -->
+      <!-- </div> -->
     {:then}
       <div class="table-container flex items-center justify-center my-8">
         <table class="table table-hover">

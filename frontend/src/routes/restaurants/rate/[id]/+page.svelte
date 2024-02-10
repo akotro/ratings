@@ -155,14 +155,14 @@
 </script>
 
 {#if checkingAuth}
-  <div class="flex items-center justify-center my-12">
-    <Loading />
-  </div>
+  <!-- <div class="flex items-center justify-center my-12"> -->
+  <!--   <Loading /> -->
+  <!-- </div> -->
 {:else if $user && $user.token.length > 0}
   {#await get_user_rating()}
-    <div class="flex items-center justify-center my-12">
-      <Loading />
-    </div>
+    <!-- <div class="flex items-center justify-center my-12"> -->
+    <!--   <Loading /> -->
+    <!-- </div> -->
   {:then}
     <h1 class="text-center text-2xl font-bold my-4 mb-4">{id}</h1>
     <h2 class="text-center text-xl font-bold mb-4">Rate It!</h2>
@@ -195,9 +195,9 @@
   <!-- TODO: Rerender this when rating changes -->
   {#if hasRated}
     {#await ratingComplete()}
-      <div class="flex items-center justify-center my-12">
-        <Loading />
-      </div>
+      <!-- <div class="flex items-center justify-center my-12"> -->
+      <!--   <Loading /> -->
+      <!-- </div> -->
     {:then}
       {#if isRatingComplete}
         <div class="flex items-center justify-center my-12">
@@ -205,9 +205,9 @@
         </div>
 
         {#await getRestaurantRatings()}
-          <div class="flex items-center justify-center my-12">
-            <Loading />
-          </div>
+          <!-- <div class="flex items-center justify-center my-12"> -->
+          <!--   <Loading /> -->
+          <!-- </div> -->
         {:then}
           {#if restaurantRatings.length > 0}
             <div class="my-12 mx-auto max-w-7xl">

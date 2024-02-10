@@ -60,9 +60,9 @@
 </script>
 
 {#if checkingAuth}
-  <div class="flex items-center justify-center my-12">
-    <Loading />
-  </div>
+  <!-- <div class="flex items-center justify-center my-12"> -->
+  <!--   <Loading /> -->
+  <!-- </div> -->
 {:else if $user && $user.token.length > 0}
   <div class="flex flex-col items-center">
     <h3 class="p-6 h3 text-white text-center">
@@ -91,7 +91,7 @@
     <br />
     {#if loginLoading}
       <button class="btn btn-lg variant-filled-surface">
-        <Loading size="6" />Loading
+        <Loading />Loading
       </button>
     {:else}
       <button class="btn btn-lg variant-filled-surface" type="submit"> Login </button>
