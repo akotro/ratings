@@ -65,6 +65,7 @@
   }
 
   async function rateRestaurant() {
+    hasRated = false;
     rateLoading = true;
     rateFailed = false;
 
@@ -207,7 +208,6 @@
     </div>
   {/if}
 
-  <!-- TODO: Rerender this when rating changes -->
   {#if hasRated}
     {#await ratingComplete()}
       <!-- <div class="flex items-center justify-center my-12"> -->

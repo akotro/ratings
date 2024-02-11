@@ -1,3 +1,4 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,6 +47,8 @@ pub struct DbRating {
     pub user_id: String,
     pub username: String,
     pub score: f32,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Serialize, Deserialize)]

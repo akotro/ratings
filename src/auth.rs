@@ -38,6 +38,7 @@ pub fn validate_password(stored_hash: &str, password: &str) -> bool {
 }
 
 pub fn generate_token(req: &HttpRequest, id: String, username: String) -> String {
+    // TODO: Add roles to user claims
     let claims = UserClaims {
         id,
         username,

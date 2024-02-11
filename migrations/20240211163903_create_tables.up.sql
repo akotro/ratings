@@ -1,4 +1,4 @@
--- Your SQL goes here
+-- Add up migration script here
 CREATE TABLE users (
     id CHAR(36) PRIMARY KEY,
     username TEXT NOT NULL,

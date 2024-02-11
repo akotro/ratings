@@ -1,4 +1,4 @@
--- This file should undo anything in `up.sql`
+-- Add down migration script here
 DROP TABLE users;
 DROP TABLE restaurants;
 DROP TABLE menu_items;

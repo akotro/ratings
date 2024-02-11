@@ -3,6 +3,7 @@
 use std::{cmp::Ordering, env, result::Result::Ok};
 
 use anyhow::{anyhow, Error, Result};
+use chrono::Utc;
 use dotenvy::dotenv;
 use sqlx::{
     migrate,
@@ -15,11 +16,11 @@ use crate::{db_models::*, models::*};
 
 // NOTE:(akotro) Database
 
-const LOCAL_DB: &str = "DATABASE_URL";
+const DB_URL: &str = "DATABASE_URL";
 
 pub async fn init_database() -> Result<MySqlPool, Error> {
     dotenv().ok();
-    let database_url = env::var(LOCAL_DB).expect("DATABASE_URL must be set");
+    let database_url = env::var(DB_URL).expect("DATABASE_URL must be set");
     let pool = MySqlPoolOptions::new().connect(&database_url).await?;
 
     migrate!().run(&pool).await?;
@@ -61,7 +62,7 @@ pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
         })
         .collect();
 
-    let results: Result<Vec<_>, _> = futures::future::join_all(tasks).await.into_iter().collect();
+    let results: Result<Vec<User>> = futures::future::join_all(tasks).await.into_iter().collect();
 
     results
 }
@@ -105,6 +106,8 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
                 return Err(anyhow!("Could not get db_user: {err}"));
             }
         };
+
+        tx.commit().await?;
 
         Ok(User {
             id: db_user.id,
@@ -408,13 +411,19 @@ pub async fn delete_menu_item(
 // NOTE:(akotro) Ratings
 
 pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Result<Rating> {
+    let created_at = Utc::now().naive_utc();
+    let updated_at = created_at;
+
     let query = query_as!(
-        NewRating,
-        "INSERT INTO ratings (restaurant_id, user_id, username, score) VALUES (?, ?, ?, ?)",
+        Rating,
+        "INSERT INTO ratings (restaurant_id, user_id, username, score, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)",
         rating.restaurant_id,
         rating.user_id,
         rating.username,
-        rating.score
+        rating.score,
+        created_at,
+        updated_at
     );
     let result = query.execute(conn).await?;
 
@@ -427,6 +436,8 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
             user_id: rating.user_id.clone(),
             username: rating.username.clone(),
             score: rating.score,
+            created_at,
+            updated_at,
         })
     } else {
         Err(anyhow::anyhow!("Failed to create rating."))
@@ -436,7 +447,7 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
 pub async fn get_ratings_by_user(conn: &mut MySqlConnection, user_id: &str) -> Result<Vec<Rating>> {
     let query = query_as!(
         Rating,
-        "SELECT id, restaurant_id, user_id, score, username
+        "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE user_id = ?",
         user_id
@@ -452,7 +463,7 @@ pub async fn get_ratings_by_restaurant(
 ) -> Result<Vec<Rating>> {
     let query = query_as!(
         Rating,
-        "SELECT id, restaurant_id, user_id, score, username
+        "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE restaurant_id = ?",
         restaurant_id
@@ -469,7 +480,7 @@ pub async fn get_rating(
 ) -> Result<Rating> {
     let query = query_as!(
         Rating,
-        "SELECT id, restaurant_id, user_id, score, username
+        "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE user_id = ? AND restaurant_id = ?",
         user_id,
@@ -490,7 +501,7 @@ pub async fn is_restaurant_rated_by_user(
 ) -> Result<bool> {
     let query = query_as!(
         Rating,
-        "SELECT id, restaurant_id, user_id, score, username
+        "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE restaurant_id = ? AND user_id = ?",
         restaurant_id,
@@ -537,25 +548,40 @@ pub async fn update_rating(
     rating: &NewRating,
     user_id: &str,
 ) -> Result<Rating> {
-    let result = query!(
+    let mut tx = conn.begin().await?;
+
+    let updated_at = Utc::now().naive_utc();
+    let _ = match query!(
         "UPDATE ratings
-         SET score = ?, username = ?
+         SET score = ?, username = ?, updated_at = ?
          WHERE user_id = ? and restaurant_id = ?",
         rating.score,
         rating.username,
+        updated_at,
         user_id,
         rating.restaurant_id
     )
-    .execute(conn)
-    .await?;
+    .execute(&mut *tx)
+    .await
+    {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not update rating: {err}"));
+        }
+    };
 
-    Ok(Rating {
-        id: result.last_insert_id() as i32,
-        restaurant_id: rating.restaurant_id.clone(),
-        user_id: user_id.to_string(),
-        username: rating.username.clone(),
-        score: rating.score,
-    })
+    let updated_rating = match get_rating(&mut tx, user_id, &rating.restaurant_id).await {
+        Ok(updated_rating) => updated_rating,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not get rating: {err}"));
+        }
+    };
+
+    tx.commit().await?;
+
+    Ok(updated_rating)
 }
 
 pub async fn delete_rating(

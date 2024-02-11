@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, restaurant_id, user_id, score, username\n         FROM ratings\n         WHERE restaurant_id = ?",
+  "query": "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at\n         FROM ratings\n         WHERE restaurant_id = ? AND user_id = ?",
   "describe": {
     "columns": [
       {
@@ -52,12 +52,34 @@
           "char_set": 224,
           "max_size": 1020
         }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 19
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at",
+        "type_info": {
+          "type": "Datetime",
+          "flags": "NOT_NULL | BINARY | ON_UPDATE_NOW",
+          "char_set": 63,
+          "max_size": 19
+        }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
+      false,
+      false,
       false,
       false,
       false,
@@ -65,5 +87,5 @@
       false
     ]
   },
-  "hash": "6e9b69a400db623dcd16f8f7e300cd8d45b29b5cfdb099bf194cb8afee5387ff"
+  "hash": "362e6c53bd24d53263fe913de9d515a5bf218aadffd06df405cec5280bcad5d2"
 }

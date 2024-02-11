@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +41,8 @@ pub struct Rating {
     pub user_id: String,
     pub username: String,
     pub score: f32,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -21,24 +21,9 @@ use actix_web::{
 };
 use dotenvy::dotenv;
 use env_logger::Env;
-use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslFiletype, SslMethod};
 use routes::*;
 
 const JWT_SECRET: &str = "JWT_SECRET";
-
-fn _configure_ssl() -> SslAcceptorBuilder {
-    let (key_path, cert_path) = if cfg!(debug_assertions) {
-        ("resources/key.pem", "resources/certificate.pem")
-    } else {
-        ("key.pem", "certificate.pem")
-    };
-    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-    builder
-        .set_private_key_file(key_path, SslFiletype::PEM)
-        .unwrap();
-    builder.set_certificate_chain_file(cert_path).unwrap();
-    builder
-}
 
 fn configure_governor() -> GovernorConfig<PeerIpKeyExtractor, NoOpMiddleware<QuantaInstant>> {
     GovernorConfigBuilder::default()
@@ -71,7 +56,6 @@ async fn main() -> anyhow::Result<()> {
 
     let db_pool = db_util::init_database().await?;
 
-    // let ssl_builder = configure_ssl();
     let governor_conf = configure_governor();
 
     let ip_blacklist = Arc::new(Mutex::new(Vec::<String>::new()));
@@ -116,7 +100,6 @@ async fn main() -> anyhow::Result<()> {
             )
     })
     .bind(("0.0.0.0", 5959))?
-    // .bind_openssl("0.0.0.0:5959", ssl_builder)?
     .run()
     .await?;
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import { user } from './store';
-  import { LOGIN_ENDPOINT, REGISTER_ENDPOINT } from './endpoints'; // Assuming you have a REGISTER_ENDPOINT
+  import { LOGIN_ENDPOINT, REGISTER_ENDPOINT } from './endpoints';
   import Loading from './loading.svelte';
   import axios from 'axios';
   import { setTokenCookie, deleteTokenCookie, readTokenCookie } from './auth';
@@ -14,6 +14,7 @@
   let passwordsMatchError = false;
   let registration = false;
 
+  // TODO: verify token with backend
   let checkingAuth = true;
   onMount(() => {
     const token = readTokenCookie();
@@ -46,6 +47,7 @@
           setTokenCookie(data.data.token);
           username = '';
           password = '';
+          confirmPassword = '';
         } else {
           loginFailed = true;
         }
