@@ -14,6 +14,8 @@ use sqlx::MySqlPool;
 
 use crate::{db_util, models::UserClaims};
 
+pub const JWT_SECRET: &str = "JWT_SECRET";
+
 pub fn generate_password_hash(password: String) -> Result<String, argon2::password_hash::Error> {
     let argon2 = Argon2::default();
     let salt = SaltString::generate(&mut OsRng);

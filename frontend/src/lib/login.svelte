@@ -82,7 +82,7 @@
 
   function toggleRegistration() {
     registration = !registration;
-    passwordsMatchError = false; // Reset this when toggling registration to ensure it starts clean
+    passwordsMatchError = false;
   }
 </script>
 

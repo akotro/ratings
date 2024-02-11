@@ -1,53 +1,25 @@
 mod auth;
 mod db_models;
 mod db_util;
+mod middleware;
 mod models;
 mod routes;
 
-use std::{
-    env,
-    sync::{Arc, Mutex},
-};
-
-use actix_cors::Cors;
-use actix_governor::{
-    governor::{clock::QuantaInstant, middleware::NoOpMiddleware},
-    Governor, GovernorConfig, GovernorConfigBuilder, PeerIpKeyExtractor,
-};
+use actix_governor::Governor;
 use actix_web::{
     middleware::Logger,
     web::{self, Data},
     App, HttpResponse, HttpServer,
 };
+use auth::JWT_SECRET;
 use dotenvy::dotenv;
 use env_logger::Env;
+use middleware::{configure_cors, configure_governor, json_error_handler};
 use routes::*;
-
-const JWT_SECRET: &str = "JWT_SECRET";
-
-fn configure_governor() -> GovernorConfig<PeerIpKeyExtractor, NoOpMiddleware<QuantaInstant>> {
-    GovernorConfigBuilder::default()
-        .permissive(true)
-        .per_second(60)
-        .burst_size(100)
-        .finish()
-        .unwrap()
-}
-
-fn configure_cors() -> Cors {
-    let cors = Cors::default()
-        // .allowed_origin("http://64.226.108.119:3000")
-        .allow_any_origin()
-        .allow_any_method()
-        .allow_any_header();
-    if cfg!(debug_assertions) {
-        cors.allowed_origin("http://localhost:5173")
-            .allowed_origin("http://localhost:4173")
-            .allowed_origin("http://localhost:3000")
-    } else {
-        cors
-    }
-}
+use std::{
+    env,
+    sync::{Arc, Mutex},
+};
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
@@ -78,6 +50,7 @@ async fn main() -> anyhow::Result<()> {
                     .app_data(Data::new(db_pool.clone()))
                     .app_data(Data::new(ip_blacklist.clone()))
                     .app_data(secret_key.clone())
+                    .app_data(web::JsonConfig::default().error_handler(json_error_handler))
                     .service(get_users_route)
                     .service(delete_user_route)
                     .service(create_restaurant_route)
