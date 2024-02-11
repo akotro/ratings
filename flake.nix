@@ -68,7 +68,7 @@
       frontendNodeDependencies = (pkgs.callPackage ./frontend/default.nix {}).nodeDependencies;
       frontend = pkgs.stdenv.mkDerivation {
         name = "frontend";
-        src = ./frontend;
+        src = gitignore.lib.gitignoreSource ./frontend;
         buildInputs = [pkgs.nodejs];
         buildPhase = ''
           ln -s ${frontendNodeDependencies}/lib/node_modules ./node_modules

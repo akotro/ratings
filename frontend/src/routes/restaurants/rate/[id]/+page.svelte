@@ -23,6 +23,7 @@
   let datasetData = Array<number>();
   let labels = Array<string>();
   let averageRating = 0;
+  let rateFailed = false;
 
   let checkingAuth = true;
   onMount(() => {
@@ -65,9 +66,11 @@
 
   async function rateRestaurant() {
     rateLoading = true;
+    rateFailed = false;
+
     try {
       if ($user && $user.token.length > 0) {
-        await axios.post(
+        const response = await axios.post(
           RATE_ENDPOINT($user.id),
           {
             id: -1,
@@ -83,10 +86,16 @@
             }
           }
         );
-        hasRated = true;
+        const data = response.data;
+        if (data.success && data.data) {
+          hasRated = true;
+        } else {
+          rateFailed = true;
+        }
       }
     } catch (error) {
       // console.log('Rate error: ' + error);
+      rateFailed = true;
     }
 
     rateLoading = false;
@@ -191,6 +200,12 @@
       </form>
     </div>
   {/await}
+
+  {#if rateFailed}
+    <div class="flex items-center justify-center my-12">
+      <p class="text-red-500">Operation failed. Please try again.</p>
+    </div>
+  {/if}
 
   <!-- TODO: Rerender this when rating changes -->
   {#if hasRated}
