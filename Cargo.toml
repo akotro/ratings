@@ -9,7 +9,7 @@ edition = "2021"
 actix-web = { version = "4", features = ["openssl"] }
 actix-governor = "0.5"
 actix-cors = "0.7"
-# openssl = { version = "0.10", features = ["vendored", "v110"] }
+openssl = { version = "0.10", features = ["vendored", "v110"] }
 jsonwebtoken = "9.2"
 argon2 = "0.5"
 uuid = { version = "1.7", features = ["v4", "fast-rng", "macro-diagnostics"] }
