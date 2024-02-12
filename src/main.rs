@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
 
     env_logger::init_from_env(Env::default().default_filter_or("info"));
 
-    HttpServer::new(move || {
+    let server_config = HttpServer::new(move || {
         App::new()
             .wrap(Logger::new(
                 "%a \"%r\" %s %b %D \"%{Referer}i\" \"%{User-Agent}i\" %U %{r}a",
@@ -71,10 +71,13 @@ async fn main() -> anyhow::Result<()> {
                     )
                     .default_service(web::route().to(HttpResponse::NotFound)),
             )
-    })
-    .bind(("0.0.0.0", 5959))?
-    .run()
-    .await?;
+    });
+
+    if cfg!(debug_assertions) {
+        server_config.bind(("127.0.0.1", 5959))?.run().await?;
+    } else {
+        server_config.bind(("0.0.0.0", 5959))?.run().await?;
+    }
 
     Ok(())
 }
