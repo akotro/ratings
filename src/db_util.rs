@@ -7,6 +7,7 @@ use chrono::Utc;
 use dotenvy::dotenv;
 use sqlx::{
     migrate,
+    migrate::Migrator,
     mysql::{MySqlPoolOptions, MySqlQueryResult},
     pool::PoolConnection,
     query, query_as, Acquire, MySql, MySqlConnection, MySqlExecutor, MySqlPool, Row,
@@ -18,12 +19,14 @@ use crate::{db_models::*, models::*};
 
 const DB_URL: &str = "DATABASE_URL";
 
+static MIGRATOR: Migrator = migrate!();
+
 pub async fn init_database() -> Result<MySqlPool, Error> {
     dotenv().ok();
     let database_url = env::var(DB_URL).expect("DATABASE_URL must be set");
     let pool = MySqlPoolOptions::new().connect(&database_url).await?;
 
-    migrate!().run(&pool).await?;
+    MIGRATOR.run(&pool).await?;
 
     Ok(pool)
 }
@@ -33,39 +36,6 @@ pub async fn get_connection(pool: &MySqlPool) -> Option<PoolConnection<MySql>> {
 }
 
 // NOTE:(akotro) Users
-
-pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
-    let db_users = sqlx::query_as!(DbUser, "SELECT id, username, password FROM users")
-        .fetch_all(pool)
-        .await?;
-
-    let tasks: Vec<_> = db_users
-        .into_iter()
-        .map(|db_user| {
-            let pool = pool.clone();
-            async move {
-                // TODO: Better way to do this?
-                let mut conn = get_connection(&pool)
-                    .await
-                    .ok_or(anyhow!("Failed to get connection."))?;
-                let ratings = get_ratings_by_user(&mut conn, &db_user.id)
-                    .await
-                    .unwrap_or_default();
-                Ok(User {
-                    id: db_user.id,
-                    token: String::new(),
-                    username: db_user.username,
-                    password: db_user.password,
-                    ratings,
-                })
-            }
-        })
-        .collect();
-
-    let results: Result<Vec<User>> = futures::future::join_all(tasks).await.into_iter().collect();
-
-    results
-}
 
 pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Result<User> {
     let mut tx = conn.begin().await?;
@@ -120,6 +90,38 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
         Err(anyhow::anyhow!("Failed to create user."))
     }
 }
+pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
+    let db_users = sqlx::query_as!(DbUser, "SELECT id, username, password FROM users")
+        .fetch_all(pool)
+        .await?;
+
+    let tasks: Vec<_> = db_users
+        .into_iter()
+        .map(|db_user| {
+            let pool = pool.clone();
+            async move {
+                // TODO: Better way to do this?
+                let mut conn = get_connection(&pool)
+                    .await
+                    .ok_or(anyhow!("Failed to get connection."))?;
+                let ratings = get_ratings_by_user(&mut conn, &db_user.id)
+                    .await
+                    .unwrap_or_default();
+                Ok(User {
+                    id: db_user.id,
+                    token: String::new(),
+                    username: db_user.username,
+                    password: db_user.password,
+                    ratings,
+                })
+            }
+        })
+        .collect();
+
+    let results: Result<Vec<User>> = futures::future::join_all(tasks).await.into_iter().collect();
+
+    results
+}
 
 pub async fn get_user_by_credentials(
     conn: &mut MySqlConnection,
@@ -132,11 +134,23 @@ pub async fn get_user_by_credentials(
         "SELECT id, username, password FROM users WHERE username = ?",
         username
     );
-    let db_user = query.fetch_optional(&mut *tx).await?;
+    let db_user_result = match query.fetch_optional(&mut *tx).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("User not found: {err}"));
+        }
+    };
 
-    match db_user {
+    match db_user_result {
         Some(db_user) => {
-            let ratings = get_ratings_by_user(&mut tx, &db_user.id).await?;
+            let ratings = match get_ratings_by_user(&mut tx, &db_user.id).await {
+                Ok(query_result) => query_result,
+                Err(err) => {
+                    tx.rollback().await?;
+                    return Err(anyhow!("User's ratings not found: {err}"));
+                }
+            };
             tx.commit().await?;
             Ok(Some(User {
                 id: db_user.id,
@@ -186,22 +200,34 @@ pub async fn create_restaurant(
     conn: &mut MySqlConnection,
     restaurant: &Restaurant,
 ) -> Result<Restaurant> {
+    let mut tx = conn.begin().await?;
+
     let query = query_as!(
         Restaurant,
         "INSERT INTO restaurants (id, cuisine) VALUES (?, ?)",
         restaurant.id,
         restaurant.cuisine
     );
-    let result = query.execute(conn).await?;
+    let result = match query.execute(&mut *tx).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not create restaurant: {err}"));
+        }
+    };
 
     if result.rows_affected() == 1 {
-        let last_insert_id = result.last_insert_id();
+        let db_restaurant = match get_restaurant(&mut tx, &restaurant.id).await {
+            Ok(restaurant) => restaurant,
+            Err(err) => {
+                tx.rollback().await?;
+                return Err(anyhow!("Could not get db restaurant: {err}"));
+            }
+        };
 
-        Ok(Restaurant {
-            id: last_insert_id.to_string(),
-            cuisine: restaurant.cuisine.clone(),
-            menu: Vec::<MenuItem>::new(),
-        })
+        tx.commit().await?;
+
+        Ok(db_restaurant)
     } else {
         Err(anyhow::anyhow!("Failed to create restaurant."))
     }
@@ -223,27 +249,58 @@ pub async fn get_restaurants(conn: &mut MySqlConnection) -> Result<Vec<Restauran
     Ok(restaurants)
 }
 
-pub async fn is_restaurant_rating_complete(
-    conn: &mut MySqlConnection,
-    restaurant_id: &str,
-) -> Result<bool> {
-    let result = sqlx::query_scalar!(
-        "
-        SELECT
-            (SELECT COUNT(*) FROM users) =
-            (SELECT COUNT(*) FROM ratings WHERE restaurant_id = ?) AS is_complete
-        ",
-        restaurant_id
-    )
-    .fetch_one(conn)
-    .await?;
+pub async fn get_restaurant(conn: &mut MySqlConnection, restaurant_id: &str) -> Result<Restaurant> {
+    let mut tx = Acquire::begin(conn).await?;
 
-    let is_complete = match result {
-        Some(is_complete) => is_complete == 1,
-        None => return Err(anyhow!("Failed to check if restaurant rating is complete.")),
+    let query = query_as!(
+        DbRestaurant,
+        "SELECT id, cuisine FROM restaurants WHERE id = ?",
+        restaurant_id
+    );
+    let db_restaurant_result = match query.fetch_optional(&mut *tx).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Restaurant not found: {err}"));
+        }
     };
 
-    Ok(is_complete)
+    match db_restaurant_result {
+        Some(db_restaurant) => {
+            let menu_items = match get_menu_items(&mut tx, &db_restaurant.id).await {
+                Ok(query_result) => query_result,
+                Err(err) => {
+                    tx.rollback().await?;
+                    return Err(anyhow!("Restaurants's menu items not found: {err}"));
+                }
+            };
+            Ok(Restaurant {
+                id: db_restaurant.id,
+                cuisine: db_restaurant.cuisine,
+                menu: menu_items,
+            })
+        }
+        None => Err(anyhow!("Restaurant not found")),
+    }
+}
+
+pub async fn update_restaurant(
+    conn: &mut MySqlConnection,
+    restaurant_id: &str,
+    restaurant: &Restaurant,
+) -> Result<MySqlQueryResult> {
+    let result = query!(
+        "UPDATE restaurants
+         SET id = ?, cuisine = ?
+         WHERE id = ?;",
+        restaurant.id,
+        restaurant.cuisine,
+        restaurant_id
+    )
+    .execute(conn)
+    .await?;
+
+    Ok(result)
 }
 
 pub async fn delete_restaurant(
@@ -255,6 +312,25 @@ pub async fn delete_restaurant(
         .await?;
 
     Ok(result)
+}
+
+pub async fn is_restaurant_rating_complete(
+    conn: &mut MySqlConnection,
+    restaurant_id: &str,
+) -> Result<bool> {
+    let result = sqlx::query_scalar!(
+        "SELECT (SELECT COUNT(*) FROM users) = (SELECT COUNT(*) FROM ratings WHERE restaurant_id = ?) AS is_complete",
+        restaurant_id
+    )
+    .fetch_one(conn)
+    .await?;
+
+    let is_complete = match result {
+        Some(is_complete) => is_complete == 1,
+        None => return Err(anyhow!("Failed to check if restaurant rating is complete.")),
+    };
+
+    Ok(is_complete)
 }
 
 pub async fn get_avg_rating(
@@ -649,4 +725,234 @@ pub async fn delete_ip(conn: &mut MySqlConnection, ip: &str) -> Result<MySqlQuer
         .await?;
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test]
+    async fn test_init_database() {
+        let pool_result = init_database().await;
+        assert!(pool_result.is_ok());
+    }
+
+    #[sqlx::test]
+    async fn test_create_user(pool: MySqlPool) -> Result<()> {
+        let new_user = NewUser {
+            id: "test_id".to_string(),
+            username: "test_username".to_string(),
+            password: "test_password".to_string(),
+        };
+
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+        let user_result = create_user(&mut conn, &new_user).await;
+        assert!(user_result.is_ok());
+
+        let user = user_result?;
+        assert_eq!(user.id, new_user.id);
+        assert_eq!(user.username, new_user.username);
+        assert_eq!(user.password, new_user.password);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_get_users(pool: MySqlPool) -> Result<()> {
+        let users_result = get_users(&pool).await;
+        assert!(users_result.is_ok());
+
+        let users = users_result?;
+        assert!(!users.is_empty());
+
+        let user = users.first().expect("");
+        assert_eq!(user.id, "test_id");
+        assert_eq!(user.username, "test_username");
+        assert_eq!(user.password, "test_password");
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_get_user_by_credentials(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let user_result = get_user_by_credentials(&mut conn, "test_username").await;
+        assert!(user_result.is_ok());
+
+        let user_option = user_result?;
+        assert!(user_option.is_some());
+
+        let user = user_option.expect("");
+        assert_eq!(user.id, "test_id");
+        assert_eq!(user.username, "test_username");
+        assert_eq!(user.password, "test_password");
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_update_user(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let user = User {
+            id: "test_id".to_string(),
+            username: "new_username".to_string(),
+            password: "new_password".to_string(),
+            ..Default::default()
+        };
+
+        let update_user_result = update_user(&mut conn, &user.id, &user).await;
+        assert!(update_user_result.is_ok());
+
+        let query_result = update_user_result?;
+        assert_eq!(query_result.rows_affected(), 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_delete_user(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let delete_user_result = delete_user(&mut conn, "test_id").await;
+        assert!(delete_user_result.is_ok());
+
+        let query_result = delete_user_result?;
+        assert_eq!(query_result.rows_affected(), 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn test_create_restaurant(pool: MySqlPool) -> Result<()> {
+        let new_restaurant = Restaurant {
+            id: "test_restaurant".to_string(),
+            cuisine: "test_cuisine".to_string(),
+            ..Default::default()
+        };
+
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+        let create_restaurant_result = create_restaurant(&mut conn, &new_restaurant).await;
+        assert!(create_restaurant_result.is_ok());
+
+        let restaurant = create_restaurant_result?;
+        assert_eq!(restaurant.id, new_restaurant.id);
+        assert_eq!(restaurant.cuisine, new_restaurant.cuisine);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("restaurants")))]
+    async fn test_get_restaurants(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurants_result = get_restaurants(&mut conn).await;
+        assert!(restaurants_result.is_ok());
+
+        let restaurants = restaurants_result?;
+        assert!(!restaurants.is_empty());
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("restaurants")))]
+    async fn test_get_restaurant(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant_result = get_restaurant(&mut conn, "test_restaurant").await;
+        assert!(restaurant_result.is_ok());
+
+        let restaurant = restaurant_result.expect("");
+        assert_eq!(restaurant.id, "test_restaurant");
+        assert_eq!(restaurant.cuisine, "test_cuisine");
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("restaurants")))]
+    async fn test_update_restuarant(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant = Restaurant {
+            id: "new_restaurant".to_string(),
+            cuisine: "new_cuisine".to_string(),
+            ..Default::default()
+        };
+
+        let update_restaurant_result =
+            update_restaurant(&mut conn, "test_restaurant", &restaurant).await;
+        assert!(update_restaurant_result.is_ok());
+
+        let query_result = update_restaurant_result?;
+        assert_eq!(query_result.rows_affected(), 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("restaurants")))]
+    async fn test_delete_restaurant(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let delete_restaurant_result = delete_restaurant(&mut conn, "test_restaurant").await;
+        assert!(delete_restaurant_result.is_ok());
+
+        let query_result = delete_restaurant_result?;
+        assert_eq!(query_result.rows_affected(), 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users", "restaurants", "ratings")))]
+    async fn test_is_restaurant_rating_complete(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant_id = "test_restaurant";
+
+        let mut is_restaurant_rating_complete_result =
+            is_restaurant_rating_complete(&mut conn, restaurant_id).await;
+        assert!(is_restaurant_rating_complete_result.is_ok());
+
+        let mut is_complete = is_restaurant_rating_complete_result?;
+        assert!(!is_complete);
+
+        let new_rating = NewRating {
+            restaurant_id: restaurant_id.to_string(),
+            user_id: "test_id2".to_string(),
+            username: "test_username2".to_string(),
+            score: 8.0,
+        };
+
+        let create_rating_result = create_rating(&mut conn, &new_rating).await;
+        assert!(create_rating_result.is_ok());
+
+        is_restaurant_rating_complete_result =
+            is_restaurant_rating_complete(&mut conn, restaurant_id).await;
+        assert!(is_restaurant_rating_complete_result.is_ok());
+
+        is_complete = is_restaurant_rating_complete_result?;
+        assert!(is_complete);
+
+        Ok(())
+    }
 }

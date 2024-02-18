@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "\n        SELECT\n            (SELECT COUNT(*) FROM users) =\n            (SELECT COUNT(*) FROM ratings WHERE restaurant_id = ?) AS is_complete\n        ",
+  "query": "SELECT (SELECT COUNT(*) FROM users) = (SELECT COUNT(*) FROM ratings WHERE restaurant_id = ?) AS is_complete",
   "describe": {
     "columns": [
       {
@@ -21,5 +21,5 @@
       true
     ]
   },
-  "hash": "21b5e5441bc01235e16ffd64aa643df9121a3889cb2c9fb7d03174129373edb7"
+  "hash": "c4c8bf1903f96034769f67af20e4968a62aaf339b727645ba0c0c177e4c82c38"
 }

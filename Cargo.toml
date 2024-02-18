@@ -21,7 +21,6 @@ dotenvy = "0.15"
 sqlx = { version = "0.7", features = [
     "runtime-tokio",
     "tls-rustls",
-    # "tls-native-tls",
     "mysql",
     "macros",
     "migrate",

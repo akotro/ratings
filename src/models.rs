@@ -24,6 +24,7 @@ pub struct Restaurant {
     pub id: String,
     pub cuisine: String,
     pub menu: Vec<MenuItem>,
+    // TODO: Add active, so that we can enable or disable in the admin panel
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -43,6 +44,7 @@ pub struct Rating {
     pub score: f32,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    // TODO: Add period, eg. "2024:1/2/3/4"
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
