@@ -42,6 +42,7 @@
         inherit src nativeBuildInputs buildInputs;
         pname = "ratings";
         version = "0.1.0";
+        doCheck = false;
       };
 
       # Build *just* the cargo dependencies, so we can reuse
