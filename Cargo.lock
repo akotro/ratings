@@ -1696,6 +1696,7 @@ dependencies = [
  "env_logger",
  "futures",
  "jsonwebtoken",
+ "log",
  "openssl",
  "serde",
  "serde_json",

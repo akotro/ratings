@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::{cmp::Ordering, env, result::Result::Ok};
+use std::{cmp::Ordering, env, result::Result::Ok, str::FromStr};
 
 use anyhow::{anyhow, Error, Result};
 use chrono::Utc;
@@ -8,9 +8,10 @@ use dotenvy::dotenv;
 use sqlx::{
     migrate,
     migrate::Migrator,
-    mysql::{MySqlPoolOptions, MySqlQueryResult},
+    mysql::{MySqlConnectOptions, MySqlQueryResult},
     pool::PoolConnection,
-    query, query_as, Acquire, MySql, MySqlConnection, MySqlExecutor, MySqlPool, Row,
+    query, query_as, Acquire, ConnectOptions, MySql, MySqlConnection, MySqlExecutor, MySqlPool,
+    Row,
 };
 
 use crate::{db_models::*, models::*};
@@ -24,7 +25,10 @@ static MIGRATOR: Migrator = migrate!();
 pub async fn init_database() -> Result<MySqlPool, Error> {
     dotenv().ok();
     let database_url = env::var(DB_URL).expect("DATABASE_URL must be set");
-    let pool = MySqlPoolOptions::new().connect(&database_url).await?;
+
+    let connect_options =
+        MySqlConnectOptions::from_str(&database_url)?.log_statements(log::LevelFilter::max());
+    let pool = MySqlPool::connect_with(connect_options).await?;
 
     MIGRATOR.run(&pool).await?;
 
@@ -1097,7 +1101,7 @@ mod tests {
         let user_id = "test_id";
         let restaurant_id = "test_restaurant";
 
-        let get_rating_result = get_rating(&mut conn, restaurant_id, user_id).await;
+        let get_rating_result = get_rating(&mut conn, user_id, restaurant_id).await;
         assert!(get_rating_result.is_ok());
 
         let rating = get_rating_result?;
@@ -1178,10 +1182,10 @@ mod tests {
         assert!(update_rating_result.is_ok());
 
         let updated_rating = update_rating_result?;
-        assert_ne!(updated_rating.restaurant_id, new_rating.restaurant_id);
-        assert_ne!(updated_rating.user_id, new_rating.user_id);
-        assert_ne!(updated_rating.username, new_rating.username);
-        assert_ne!(updated_rating.score, new_rating.score);
+        assert_eq!(updated_rating.restaurant_id, new_rating.restaurant_id);
+        assert_eq!(updated_rating.user_id, new_rating.user_id);
+        assert_eq!(updated_rating.username, new_rating.username);
+        assert_eq!(updated_rating.score, new_rating.score);
 
         Ok(())
     }

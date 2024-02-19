@@ -23,6 +23,8 @@ use std::{
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
+    env_logger::init_from_env(Env::default().default_filter_or("debug"));
+
     dotenv().ok();
     let secret_key = Data::new(env::var(JWT_SECRET).expect("JWT_SECRET must be set"));
 
@@ -35,8 +37,6 @@ async fn main() -> anyhow::Result<()> {
         db_pool.clone(),
         ip_blacklist.clone(),
     ));
-
-    env_logger::init_from_env(Env::default().default_filter_or("info"));
 
     let server_config = HttpServer::new(move || {
         App::new()
