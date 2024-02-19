@@ -412,7 +412,7 @@ pub async fn get_restaurants_with_avg_rating(
 
 pub async fn create_menu_item(
     conn: &mut MySqlConnection,
-    menu_item: &MenuItem, // Assuming you have a MenuItem struct defined
+    menu_item: &MenuItem,
 ) -> Result<MenuItem> {
     let mut tx = conn.begin().await?;
 
@@ -921,7 +921,10 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users", "restaurants", "ratings")))]
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_incomplete")
+    ))]
     async fn test_is_restaurant_rating_complete(pool: MySqlPool) -> Result<()> {
         let mut conn = get_connection(&pool)
             .await
@@ -952,6 +955,251 @@ mod tests {
 
         is_complete = is_restaurant_rating_complete_result?;
         assert!(is_complete);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_get_avg_rating(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let avg_rating_result = get_avg_rating(&mut conn, "test_restaurant").await;
+        assert!(avg_rating_result.is_ok());
+
+        let avg_rating_option = avg_rating_result?;
+        assert!(avg_rating_option.is_some());
+
+        let avg_rating = avg_rating_option.expect("");
+        assert_eq!(avg_rating, 9.0);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_get_restaurants_with_avg_rating(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurants_with_avg_rating_result = get_restaurants_with_avg_rating(&mut conn).await;
+        assert!(restaurants_with_avg_rating_result.is_ok());
+
+        let restaurants_with_avg_rating = restaurants_with_avg_rating_result?;
+        assert!(!restaurants_with_avg_rating.is_empty());
+
+        let test_restaurant_option = restaurants_with_avg_rating
+            .iter()
+            .find(|&(r, _)| r.id == "test_restaurant");
+        assert!(test_restaurant_option.is_some());
+
+        let (test_restaurant, avg_rating) = test_restaurant_option.expect("");
+        assert_eq!(test_restaurant.id, "test_restaurant");
+        assert_eq!(*avg_rating, 9.0);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_incomplete")
+    ))]
+    async fn test_create_rating(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let new_rating = NewRating {
+            restaurant_id: "test_restaurant".to_string(),
+            user_id: "test_id2".to_string(),
+            username: "test_username2".to_string(),
+            score: 8.0,
+        };
+
+        let create_rating_result = create_rating(&mut conn, &new_rating).await;
+        assert!(create_rating_result.is_ok());
+
+        let rating = create_rating_result?;
+        assert_eq!(rating.restaurant_id, new_rating.restaurant_id);
+        assert_eq!(rating.user_id, new_rating.user_id);
+        assert_eq!(rating.username, new_rating.username);
+        assert_eq!(rating.score, new_rating.score);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_get_ratings_by_user(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let user_id = "test_id";
+
+        let ratings_by_user_result = get_ratings_by_user(&mut conn, user_id).await;
+        assert!(ratings_by_user_result.is_ok());
+
+        let ratings_by_user = ratings_by_user_result?;
+        assert!(!ratings_by_user.is_empty());
+        assert_eq!(ratings_by_user.len(), 1);
+
+        let rating = ratings_by_user.first().expect("");
+        assert_eq!(rating.user_id, user_id);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_get_ratings_by_restaurant(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant_id = "test_restaurant";
+
+        let ratings_by_restaurant_result =
+            get_ratings_by_restaurant(&mut conn, restaurant_id).await;
+        assert!(ratings_by_restaurant_result.is_ok());
+
+        let ratings_by_restaurant = ratings_by_restaurant_result?;
+        assert!(!ratings_by_restaurant.is_empty());
+        assert_eq!(ratings_by_restaurant.len(), 2);
+
+        for rating in ratings_by_restaurant {
+            assert_eq!(rating.restaurant_id, restaurant_id);
+        }
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_incomplete")
+    ))]
+    async fn test_get_rating(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let user_id = "test_id";
+        let restaurant_id = "test_restaurant";
+
+        let get_rating_result = get_rating(&mut conn, restaurant_id, user_id).await;
+        assert!(get_rating_result.is_ok());
+
+        let rating = get_rating_result?;
+        assert_eq!(rating.user_id, user_id);
+        assert_eq!(rating.restaurant_id, restaurant_id);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_incomplete")
+    ))]
+    async fn test_is_restaurant_rated_by_user(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant_id = "test_restaurant";
+
+        let mut is_restaurant_rated_by_user_result =
+            is_restaurant_rated_by_user(&mut conn, restaurant_id, "test_id").await;
+        assert!(is_restaurant_rated_by_user_result.is_ok());
+
+        let is_restaurant_rated_by_user1 = is_restaurant_rated_by_user_result?;
+        assert!(is_restaurant_rated_by_user1);
+
+        is_restaurant_rated_by_user_result =
+            is_restaurant_rated_by_user(&mut conn, restaurant_id, "test_id2").await;
+        assert!(is_restaurant_rated_by_user_result.is_ok());
+
+        let is_restaurant_rated_by_user2 = is_restaurant_rated_by_user_result?;
+        assert!(!is_restaurant_rated_by_user2);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_is_restaurant_rated_by_all_users(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant_id = "test_restaurant";
+
+        let is_restaurant_rated_by_all_users_result =
+            is_restaurant_rated_by_all_users(&mut conn, restaurant_id).await;
+        assert!(is_restaurant_rated_by_all_users_result.is_ok());
+
+        let is_restaurant_rated_by_all_users = is_restaurant_rated_by_all_users_result?;
+        assert!(is_restaurant_rated_by_all_users);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_update_rating(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let user_id = "test_id2";
+
+        let new_rating = NewRating {
+            restaurant_id: "test_restaurant".to_string(),
+            user_id: user_id.to_string(),
+            username: "test_username2".to_string(),
+            score: 9.0,
+        };
+
+        let update_rating_result = update_rating(&mut conn, &new_rating, user_id).await;
+        assert!(update_rating_result.is_ok());
+
+        let updated_rating = update_rating_result?;
+        assert_ne!(updated_rating.restaurant_id, new_rating.restaurant_id);
+        assert_ne!(updated_rating.user_id, new_rating.user_id);
+        assert_ne!(updated_rating.username, new_rating.username);
+        assert_ne!(updated_rating.score, new_rating.score);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_delete_rating(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let delete_rating_result = delete_rating(&mut conn, 1, "test_id").await;
+        assert!(delete_rating_result.is_ok());
+
+        let query_result = delete_rating_result?;
+        assert_eq!(query_result.rows_affected(), 1);
 
         Ok(())
     }
