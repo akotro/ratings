@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::{cmp::Ordering, env, result::Result::Ok, str::FromStr};
+use std::{env, result::Result::Ok, str::FromStr};
 
 use anyhow::{anyhow, Error, Result};
 use chrono::Utc;
@@ -358,36 +358,50 @@ pub async fn get_avg_rating(
 pub async fn get_restaurants_with_avg_rating(
     conn: &mut MySqlConnection,
 ) -> Result<Vec<(Restaurant, f64)>> {
-    // TODO: These are too many requests, migrate some of this logic to sql
-
     let mut tx = Acquire::begin(conn).await?;
 
-    let db_restaurants_result =
-        sqlx::query_as!(DbRestaurant, "SELECT id, cuisine FROM restaurants")
-            .fetch_all(&mut *tx)
-            .await;
+    let db_restaurants_with_avg_rating_result = sqlx::query!(
+        "SELECT r.id, r.cuisine, IFNULL(AVG(ra.score), 0) AS avg_rating
+            FROM restaurants r
+            LEFT JOIN ratings ra ON ra.restaurant_id = r.id
+            GROUP BY r.id
+            ORDER BY avg_rating DESC, r.id"
+    )
+    .fetch_all(&mut *tx)
+    .await;
 
-    if let Err(e) = db_restaurants_result {
-        tx.rollback().await?;
-        return Err(e.into());
-    }
+    let db_restaurants_with_avg_rating_result = match db_restaurants_with_avg_rating_result {
+        Ok(rows) => {
+            let mapped_rows: Result<Vec<(DbRestaurant, f64)>, Error> = rows
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        DbRestaurant {
+                            id: row.id,
+                            cuisine: row.cuisine,
+                        },
+                        row.avg_rating,
+                    ))
+                })
+                .collect();
+
+            mapped_rows
+        }
+        Err(e) => {
+            tx.rollback().await?;
+            return Err(e.into());
+        }
+    };
 
     let mut results = Vec::new();
 
-    for db_restaurant in db_restaurants_result? {
+    for (db_restaurant, avg_rating) in db_restaurants_with_avg_rating_result? {
         let menu_result = get_menu_items(&mut tx, &db_restaurant.id).await;
         if menu_result.is_err() {
             tx.rollback().await?;
             return Err(menu_result.err().unwrap());
         }
         let menu = menu_result.unwrap_or_default();
-
-        let avg_rating_result = get_avg_rating(&mut tx, &db_restaurant.id).await;
-        if avg_rating_result.is_err() {
-            tx.rollback().await?;
-            return Err(avg_rating_result.err().unwrap());
-        }
-        let avg_rating = avg_rating_result.unwrap_or(None).unwrap_or(0.0);
 
         results.push((
             Restaurant {
@@ -398,14 +412,6 @@ pub async fn get_restaurants_with_avg_rating(
             avg_rating,
         ));
     }
-
-    results.sort_by(|a, b| {
-        if a.1 == 0.0 && b.1 == 0.0 {
-            a.0.id.cmp(&b.0.id)
-        } else {
-            b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal)
-        }
-    });
 
     tx.commit().await?;
 
@@ -993,19 +999,22 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let restaurant_id = "test_restaurant";
+
         let restaurants_with_avg_rating_result = get_restaurants_with_avg_rating(&mut conn).await;
         assert!(restaurants_with_avg_rating_result.is_ok());
 
         let restaurants_with_avg_rating = restaurants_with_avg_rating_result?;
         assert!(!restaurants_with_avg_rating.is_empty());
 
-        let test_restaurant_option = restaurants_with_avg_rating
-            .iter()
-            .find(|&(r, _)| r.id == "test_restaurant");
+        // let test_restaurant_option = restaurants_with_avg_rating
+        //     .iter()
+        //     .find(|&(r, _)| r.id == restaurant_id);
+        let test_restaurant_option = restaurants_with_avg_rating.first();
         assert!(test_restaurant_option.is_some());
 
         let (test_restaurant, avg_rating) = test_restaurant_option.expect("");
-        assert_eq!(test_restaurant.id, "test_restaurant");
+        assert_eq!(test_restaurant.id, restaurant_id);
         assert_eq!(*avg_rating, 9.0);
 
         Ok(())
