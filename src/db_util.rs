@@ -516,15 +516,15 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
     if result.rows_affected() == 1 {
         let last_insert_id = result.last_insert_id();
 
-        Ok(Rating {
-            id: last_insert_id as i32,
-            restaurant_id: rating.restaurant_id.clone(),
-            user_id: rating.user_id.clone(),
-            username: rating.username.clone(),
-            score: rating.score,
+        Ok(Rating::new(
+            last_insert_id as i32,
+            rating.restaurant_id.clone(),
+            rating.user_id.clone(),
+            rating.username.clone(),
+            rating.score,
             created_at,
             updated_at,
-        })
+        ))
     } else {
         Err(anyhow::anyhow!("Failed to create rating."))
     }
@@ -532,13 +532,18 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
 
 pub async fn get_ratings_by_user(conn: &mut MySqlConnection, user_id: &str) -> Result<Vec<Rating>> {
     let query = query_as!(
-        Rating,
+        DbRating,
         "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE user_id = ?",
         user_id
     );
-    let ratings = query.fetch_all(conn).await?;
+    let ratings = query
+        .fetch_all(conn)
+        .await?
+        .iter()
+        .map(Rating::from_db)
+        .collect();
 
     Ok(ratings)
 }
@@ -548,13 +553,45 @@ pub async fn get_ratings_by_restaurant(
     restaurant_id: &str,
 ) -> Result<Vec<Rating>> {
     let query = query_as!(
-        Rating,
+        DbRating,
         "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE restaurant_id = ?",
         restaurant_id
     );
-    let ratings = query.fetch_all(conn).await?;
+    let ratings = query
+        .fetch_all(conn)
+        .await?
+        .iter()
+        .map(Rating::from_db)
+        .collect();
+
+    Ok(ratings)
+}
+
+pub async fn get_ratings_by_restaurant_per_period(
+    conn: &mut MySqlConnection,
+    restaurant_id: &str,
+    year: i32,
+    period: Period,
+) -> Result<Vec<Rating>> {
+    let date_range = period.to_date_range(year)?;
+
+    let query = query_as!(
+        DbRating,
+        "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
+         FROM ratings
+         WHERE restaurant_id = ? AND created_at >= ? AND created_at <= ?",
+        restaurant_id,
+        date_range.0,
+        date_range.1
+    );
+    let ratings = query
+        .fetch_all(conn)
+        .await?
+        .iter()
+        .map(Rating::from_db)
+        .collect();
 
     Ok(ratings)
 }
@@ -565,7 +602,7 @@ pub async fn get_rating(
     restaurant_id: &str,
 ) -> Result<Rating> {
     let query = query_as!(
-        Rating,
+        DbRating,
         "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE user_id = ? AND restaurant_id = ?",
@@ -575,7 +612,7 @@ pub async fn get_rating(
     let rating = query.fetch_optional(conn).await?;
 
     match rating {
-        Some(rating) => Ok(rating),
+        Some(rating) => Ok(Rating::from_db(&rating)),
         None => Err(anyhow!("Rating not found")),
     }
 }
@@ -586,7 +623,7 @@ pub async fn is_restaurant_rated_by_user(
     user_id: &str,
 ) -> Result<bool> {
     let query = query_as!(
-        Rating,
+        DbRating,
         "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at
          FROM ratings
          WHERE restaurant_id = ? AND user_id = ?",
@@ -739,6 +776,8 @@ pub async fn delete_ip(conn: &mut MySqlConnection, ip: &str) -> Result<MySqlQuer
 
 #[cfg(test)]
 mod tests {
+    use chrono::Datelike;
+
     use super::*;
 
     #[sqlx::test]
@@ -1036,6 +1075,10 @@ mod tests {
             score: 8.0,
         };
 
+        let now = chrono::Utc::now();
+        let current_year = now.year();
+        let current_period = Period::from_date(now.date_naive());
+
         let create_rating_result = create_rating(&mut conn, &new_rating).await;
         assert!(create_rating_result.is_ok());
 
@@ -1044,6 +1087,8 @@ mod tests {
         assert_eq!(rating.user_id, new_rating.user_id);
         assert_eq!(rating.username, new_rating.username);
         assert_eq!(rating.score, new_rating.score);
+        assert_eq!(rating.created_at.year(), current_year);
+        assert_eq!(rating.period, current_period);
 
         Ok(())
     }
@@ -1093,6 +1138,43 @@ mod tests {
 
         for rating in ratings_by_restaurant {
             assert_eq!(rating.restaurant_id, restaurant_id);
+        }
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(
+        path = "./../fixtures",
+        scripts("users", "restaurants", "ratings_complete")
+    ))]
+    async fn test_get_ratings_by_restaurant_per_period(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant_id = "test_restaurant";
+
+        let now = chrono::Utc::now();
+        let current_year = now.year();
+        let current_period = Period::from_date(now.date_naive());
+
+        let ratings_by_restaurant_result = get_ratings_by_restaurant_per_period(
+            &mut conn,
+            restaurant_id,
+            current_year,
+            current_period.clone(),
+        )
+        .await;
+        assert!(ratings_by_restaurant_result.is_ok());
+
+        let ratings_by_restaurant = ratings_by_restaurant_result?;
+        assert!(!ratings_by_restaurant.is_empty());
+        assert_eq!(ratings_by_restaurant.len(), 2);
+
+        for rating in ratings_by_restaurant {
+            assert_eq!(rating.restaurant_id, restaurant_id);
+            assert_eq!(rating.created_at.year(), current_year);
+            assert_eq!(rating.period, current_period);
         }
 
         Ok(())
@@ -1187,6 +1269,10 @@ mod tests {
             score: 9.0,
         };
 
+        let now = chrono::Utc::now();
+        let current_year = now.year();
+        let current_period = Period::from_date(now.date_naive());
+
         let update_rating_result = update_rating(&mut conn, &new_rating, user_id).await;
         assert!(update_rating_result.is_ok());
 
@@ -1195,6 +1281,8 @@ mod tests {
         assert_eq!(updated_rating.user_id, new_rating.user_id);
         assert_eq!(updated_rating.username, new_rating.username);
         assert_eq!(updated_rating.score, new_rating.score);
+        assert_eq!(updated_rating.updated_at.year(), current_year);
+        assert_eq!(updated_rating.period, current_period);
 
         Ok(())
     }

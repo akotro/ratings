@@ -2,7 +2,6 @@
   import { user } from '../..//lib/store';
   import { RESTAURANTS_WITH_AVG_RATING_ENDPOINT } from '$lib/endpoints';
   import type { Restaurant } from '$lib/models';
-  import Loading from '$lib/loading.svelte';
   import axios from 'axios';
   import { onMount } from 'svelte';
   import { readTokenCookie } from '$lib/auth';

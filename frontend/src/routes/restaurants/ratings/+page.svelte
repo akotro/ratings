@@ -2,7 +2,6 @@
   import { readTokenCookie } from '$lib/auth';
   import Chart from '$lib/chart.svelte';
   import { GET_RATINGS_ENDPOINT } from '$lib/endpoints';
-  import Loading from '$lib/loading.svelte';
   import type { Rating } from '$lib/models';
   import { user } from '$lib/store';
   import axios from 'axios';

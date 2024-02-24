@@ -57,6 +57,7 @@ async fn main() -> anyhow::Result<()> {
                     .service(get_restaurants_route)
                     .service(get_restaurants_with_avg_rating_route)
                     .service(get_restaurant_ratings_route)
+                    .service(get_restaurant_ratings_per_period_route)
                     .service(is_restaurant_rating_complete_route)
                     .service(delete_restaurant_route)
                     .service(rate_restaurant_route)

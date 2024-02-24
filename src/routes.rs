@@ -220,6 +220,33 @@ async fn get_restaurant_ratings_route(
     }
 }
 
+#[get("/restaurants/{id}/ratings/{year}/{period}")]
+async fn get_restaurant_ratings_per_period_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    params: web::Path<(String, i32, Period)>,
+) -> HttpResponse {
+    if let Err(err) = validate_ip(&req) {
+        return err;
+    }
+
+    if let Err(err) = validate_token(&req) {
+        return err;
+    }
+
+    let (restaurant_id, year, period) = params.into_inner();
+
+    let mut conn = get_connection(&pool).await.unwrap();
+    let result =
+        get_ratings_by_restaurant_per_period(&mut conn, &restaurant_id, year, period).await;
+    match result {
+        Ok(restaurant_ratings) => HttpResponse::Ok().json(ApiResponse::success(restaurant_ratings)),
+        Err(error) => {
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
+        }
+    }
+}
+
 #[get("/restaurants/{id}/is_rating_complete")]
 async fn is_restaurant_rating_complete_route(
     pool: web::Data<MySqlPool>,
