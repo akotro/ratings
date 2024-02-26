@@ -1,0 +1,70 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        machine:
+          - "hoshiko"
+
+    steps:
+
+    - name: Tailscale
+      uses: tailscale/github-action@v2
+      with:
+        oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+        oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+        tags: tag:ci
+        version: 1.60.0
+
+    - name: Install Nix
+      uses: DeterminateSystems/nix-installer-action@main
+      with:
+        extra-conf: |
+          substituters = https://cache.nixos.org/
+          extra-substituters = https://nix-community.cachix.org https://aseipp-nix-cache.global.ssl.fastly.net
+          extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+
+    - name: Checkout external repository
+      uses: actions/checkout@v4
+      with:
+        repository: 'akotro/ratings'
+        # token: ${{ secrets.EXTERNAL_REPO_PAT }}
+        ref: 'main'
+
+    - name: Update flake input
+      run:
+        nix flake lock --update-input ratings
+
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Ratings Deploy"
+        git add .
+        git commit -m "chore: update ratings flake input" -a || echo "No changes to commit"
+        git push
+
+    - name: Add hoshiko to known hosts
+      id: ssh-known-hosts
+      env:
+        HOSTNAME=${{ matrix.machine }}
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan $HOSTNAME >> ~/.ssh/known_hosts
+
+    - name: Build and deploy
+      env:
+        HOSTNAME=${{ matrix.machine }}
+      run:
+        set -euxo pipefail
+        nix flake check
+        nix run github:serokell/deploy-rs .#$HOSTNAME.system
