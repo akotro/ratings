@@ -73,7 +73,7 @@ jobs:
       run: |
         set -euxo pipefail
         nix flake check --accept-flake-config
-        nix run github:serokell/deploy-rs --remote-build .#$HOSTNAME.system -- --accept-flake-config
+        nix run github:serokell/deploy-rs -- --remote-build .#$HOSTNAME.system -- --accept-flake-config
 
     - name: Commit and push changes
       if: success()
