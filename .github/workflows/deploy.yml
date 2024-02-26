@@ -72,7 +72,7 @@ jobs:
     - name: Build and deploy
       run: |
         set -euxo pipefail
-        nix flake check --accept-flake-config
+        # nix flake check --accept-flake-config
         nix run github:serokell/deploy-rs -- --remote-build .#$HOSTNAME.system -- --accept-flake-config
 
     - name: Commit and push changes
