@@ -1,4 +1,5 @@
 [![Test](https://github.com/akotro/ratings/actions/workflows/test.yml/badge.svg)](https://github.com/akotro/ratings/actions/workflows/test.yml)
+[![Deploy](https://github.com/akotro/ratings/actions/workflows/deploy.yml/badge.svg)](https://github.com/akotro/ratings/actions/workflows/deploy.yml)
 
 # Ratings
 
