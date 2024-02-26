@@ -7,14 +7,12 @@ on:
       - completed
     branches: [ "main" ]
 
+env:
+  HOSTNAME: hoshiko
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        machine:
-          - "hoshiko"
 
     steps:
 
@@ -55,15 +53,11 @@ jobs:
 
     - name: Add hoshiko to known hosts
       id: ssh-known-hosts
-      env:
-        HOSTNAME=${{ matrix.machine }}
       run: |
         mkdir -p ~/.ssh
         ssh-keyscan $HOSTNAME >> ~/.ssh/known_hosts
 
     - name: Build and deploy
-      env:
-        HOSTNAME=${{ matrix.machine }}
       run:
         set -euxo pipefail
         nix flake check
