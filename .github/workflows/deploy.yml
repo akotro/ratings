@@ -2,7 +2,7 @@ name: Deploy
 
 on:
   workflow_run:
-    workflows: ["Rust"]
+    workflows: ["Deploy"]
     types:
       - completed
     branches: [ "main" ]
