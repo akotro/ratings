@@ -35,8 +35,8 @@ jobs:
     - name: Checkout external repository
       uses: actions/checkout@v4
       with:
-        repository: 'akotro/ratings'
-        # token: ${{ secrets.EXTERNAL_REPO_PAT }}
+        repository: 'akotro/nixcfg'
+        token: ${{ secrets.GIT_NIXCFG_PAT }}
         ref: 'main'
 
     - name: Update flake input
