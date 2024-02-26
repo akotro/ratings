@@ -1,4 +1,4 @@
-[![Rust](https://github.com/akotro/ratings/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/akotro/ratings/actions/workflows/rust.yml)
+[![Test](https://github.com/akotro/ratings/actions/workflows/test.yml/badge.svg)](https://github.com/akotro/ratings/actions/workflows/test.yml)
 
 # Ratings
 
