@@ -157,10 +157,6 @@ async fn get_restaurants_route(pool: web::Data<MySqlPool>, req: HttpRequest) -> 
         return err;
     }
 
-    // if let Err(err) = validate_token(&req) {
-    //     return err;
-    // }
-
     let mut conn = get_connection(&pool).await.unwrap();
     let result = get_restaurants(&mut conn).await;
     match result {
