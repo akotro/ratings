@@ -47,14 +47,6 @@ jobs:
       run: |
         nix flake lock --accept-flake-config --update-input ratings
 
-    - name: Commit and push changes
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action Ratings Deploy"
-        git add .
-        git commit -m "chore: update ratings flake input" -a || echo "No changes to commit"
-        git push
-
     - name: Add hoshiko to known hosts
       id: ssh-known-hosts
       run: |
@@ -64,5 +56,15 @@ jobs:
     - name: Build and deploy
       run: |
         set -euxo pipefail
-        nix flake check
-        nix run github:serokell/deploy-rs .#$HOSTNAME.system
+        nix flake check --accept-flake-config
+        nix run github:serokell/deploy-rs .#$HOSTNAME.system -- --accept-flake-config
+
+    - name: Commit and push changes
+      if: success()
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action Ratings Deploy"
+        git add .
+        git commit -m "chore: update ratings flake input" -a || echo "No changes to commit"
+        git push
+
