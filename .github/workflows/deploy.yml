@@ -44,7 +44,7 @@ jobs:
         ref: 'main'
 
     - name: Update flake input
-      run:
+      run: |
         nix flake lock --accept-flake-config --update-input ratings
 
     - name: Commit and push changes
@@ -62,7 +62,7 @@ jobs:
         ssh-keyscan $HOSTNAME >> ~/.ssh/known_hosts
 
     - name: Build and deploy
-      run:
+      run: |
         set -euxo pipefail
         nix flake check
         nix run github:serokell/deploy-rs .#$HOSTNAME.system
