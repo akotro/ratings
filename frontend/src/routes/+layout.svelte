@@ -7,14 +7,20 @@
     Drawer,
     getDrawerStore,
     type DrawerSettings,
-    initializeStores
+    initializeStores,
+    storePopup,
+    type PopupSettings,
+    popup,
+    Toast
   } from '@skeletonlabs/skeleton';
+  import { computePosition, autoUpdate, offset, shift, flip, arrow } from '@floating-ui/dom';
   import { user } from '$lib/store';
-  import { deleteTokenCookie, getUserFromToken, readTokenCookie } from '$lib/auth';
+  import { deleteCookies, getUserFromToken, readTokenCookie } from '$lib/auth';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import Navigation from '$lib/navigation.svelte';
 
+  storePopup.set({ computePosition, autoUpdate, offset, shift, flip, arrow });
   initializeStores();
 
   onMount(() => {
@@ -35,22 +41,26 @@
 
   function logout() {
     $user = null;
-    deleteTokenCookie();
+    deleteCookies();
     goto('/');
   }
 
   const drawerStore = getDrawerStore();
   function drawerOpen(): void {
     const drawerSettings: DrawerSettings = {
-      // bgDrawer: 'bg-purple-900 text-white',
       bgBackdrop: 'bg-gradient-to-tr from-blue-500/50 via-purple-500/50 to-blue-500/50',
       width: 'w-[140px] md:w-[480px]',
-      // padding: 'p-4',
       rounded: 'rounded-xl'
     };
 
     drawerStore.open(drawerSettings);
   }
+
+  const logoutPopup: PopupSettings = {
+    event: 'click',
+    target: 'logoutPopup',
+    placement: 'bottom'
+  };
 </script>
 
 <Drawer>
@@ -62,6 +72,8 @@
     <Navigation />
   </div>
 </Drawer>
+
+<Toast />
 
 <!-- App Shell -->
 <AppShell slotSidebarLeft="bg-surface-500/5 w-0 lg:w-32">
@@ -86,8 +98,19 @@
       </svelte:fragment>
       <svelte:fragment slot="trail">
         {#if $user && $user.token.length > 0}
-          <button class="btn btn-sm variant-filled-primary" on:click={logout}> Logout </button>
-          <p class="badge btn-sm variant-filled-secondary">{$user.username}</p>
+          <p class="badge btn-sm bg-violet-500">{$user.groupMembership?.group.name || '___'}</p>
+          <div class="relative inline-block">
+            <button
+              class="badge btn-sm variant-filled-secondary cursor-pointer"
+              use:popup={logoutPopup}
+            >
+              {$user.username}
+            </button>
+            <div class="card" data-popup="logoutPopup">
+              <button class="btn btn-sm variant-filled-primary" on:click={logout}> Logout </button>
+              <div class="arrow variant-filled-primary" />
+            </div>
+          </div>
         {/if}
       </svelte:fragment>
     </AppBar>

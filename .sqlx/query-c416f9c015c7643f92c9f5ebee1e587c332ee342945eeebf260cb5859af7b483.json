@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at\n         FROM ratings\n         WHERE user_id = ?",
+  "query": "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at\n         FROM ratings\n         WHERE restaurant_id = ? AND user_id = ? AND group_id = ?",
   "describe": {
     "columns": [
       {
@@ -15,6 +15,16 @@
       },
       {
         "ordinal": 1,
+        "name": "group_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 144
+        }
+      },
+      {
+        "ordinal": 2,
         "name": "restaurant_id",
         "type_info": {
           "type": "VarString",
@@ -24,7 +34,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "user_id",
         "type_info": {
           "type": "String",
@@ -34,7 +44,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "score",
         "type_info": {
           "type": "Float",
@@ -44,7 +54,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "username",
         "type_info": {
           "type": "VarString",
@@ -54,7 +64,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "created_at",
         "type_info": {
           "type": "Datetime",
@@ -64,7 +74,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": {
           "type": "Datetime",
@@ -75,9 +85,10 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 3
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -87,5 +98,5 @@
       false
     ]
   },
-  "hash": "f1568d42b03578de3edf2e3c650cf9523dca768cbf4cee7440eaeab8f2c4333a"
+  "hash": "c416f9c015c7643f92c9f5ebee1e587c332ee342945eeebf260cb5859af7b483"
 }

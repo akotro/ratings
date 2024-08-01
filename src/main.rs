@@ -11,7 +11,6 @@ use actix_web::{
     web::{self, Data},
     App, HttpResponse, HttpServer,
 };
-use auth::JWT_SECRET;
 use dotenvy::dotenv;
 use env_logger::Env;
 use middleware::{configure_cors, configure_governor, json_error_handler};
@@ -26,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("debug"));
 
     dotenv().ok();
-    let secret_key = Data::new(env::var(JWT_SECRET).expect("JWT_SECRET must be set"));
+    let secret_key = Data::new(env::var(auth::JWT_SECRET).expect("JWT_SECRET must be set"));
 
     let db_pool = db_util::init_database().await?;
 
@@ -53,6 +52,9 @@ async fn main() -> anyhow::Result<()> {
                     .app_data(web::JsonConfig::default().error_handler(json_error_handler))
                     .service(get_users_route)
                     .service(delete_user_route)
+                    .service(create_group_route)
+                    .service(join_group_route)
+                    .service(get_group_memberships_by_user_route)
                     .service(create_restaurant_route)
                     .service(get_restaurants_route)
                     .service(get_restaurants_with_avg_rating_route)
@@ -61,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
                     .service(is_restaurant_rating_complete_route)
                     .service(delete_restaurant_route)
                     .service(rate_restaurant_route)
-                    .service(get_ratings_route)
+                    .service(get_ratings_by_user_and_group_route)
                     .service(get_rating_route)
                     .service(update_rating_route)
                     .service(delete_rating_route)

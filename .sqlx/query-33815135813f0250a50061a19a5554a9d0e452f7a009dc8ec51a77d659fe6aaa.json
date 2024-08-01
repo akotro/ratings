@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO ratings (group_id, restaurant_id, user_id, username, score, created_at, updated_at)\n         VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "33815135813f0250a50061a19a5554a9d0e452f7a009dc8ec51a77d659fe6aaa"
+}

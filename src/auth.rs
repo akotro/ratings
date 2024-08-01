@@ -114,7 +114,7 @@ pub async fn update_blacklist(db_pool: MySqlPool, blacklist: IpBlacklist) {
         let updated_blacklist = get_ip_blacklist(db_pool.clone()).await.unwrap_or_default();
         *blacklist.lock().unwrap() = updated_blacklist;
 
-        // NOTE:(akotro) Update ip blacklist every 60 minutes
+        // NOTE: Update ip blacklist every 60 minutes
         sleep(Duration::from_secs(3600)).await;
     }
 }

@@ -3,7 +3,7 @@
 use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 
-use crate::db_models::DbRating;
+use crate::db_models::{DbGroupMembership, DbRating};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct User {
@@ -12,6 +12,7 @@ pub struct User {
     pub username: String,
     pub password: String,
     pub ratings: Vec<Rating>,
+    pub group_memberships: Vec<GroupMembership>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -19,6 +20,58 @@ pub struct UserClaims {
     pub id: String,
     pub username: String,
     pub exp: usize,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(rename_all = "lowercase")]
+pub enum Role {
+    Admin,
+    #[default]
+    Member,
+}
+
+impl std::convert::From<String> for Role {
+    fn from(value: String) -> Self {
+        match value.to_ascii_lowercase().as_str() {
+            "admin" => Role::Admin,
+            "member" => Role::Member,
+            _ => Role::Member,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Group {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GroupMembership {
+    pub id: i32,
+    pub group_id: String,
+    pub group: Group,
+    pub user_id: String,
+    pub role: Role,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+impl GroupMembership {
+    pub fn from_db(db_group_membership: &DbGroupMembership, db_group: &Group) -> Self {
+        Self {
+            id: db_group_membership.id,
+            group_id: db_group_membership.group_id.clone(),
+            group: db_group.clone(),
+            user_id: db_group_membership.user_id.clone(),
+            role: db_group_membership.role.clone(),
+            created_at: db_group_membership.created_at,
+            updated_at: db_group_membership.updated_at,
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -114,27 +167,31 @@ pub struct Rating {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub period: Period,
+    pub group_id: String,
 }
 
 impl Default for Rating {
     fn default() -> Self {
         let default_datetime = NaiveDateTime::default();
         Self {
+            created_at: default_datetime,
+            updated_at: default_datetime,
+            period: Period::from_date(default_datetime.date()),
             id: Default::default(),
             restaurant_id: Default::default(),
             user_id: Default::default(),
             username: Default::default(),
             score: Default::default(),
-            created_at: default_datetime,
-            updated_at: default_datetime,
-            period: Period::from_date(default_datetime.date()),
+            group_id: Default::default(),
         }
     }
 }
 
 impl Rating {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: i32,
+        group_id: String,
         restaurant_id: String,
         user_id: String,
         username: String,
@@ -151,12 +208,14 @@ impl Rating {
             created_at,
             updated_at,
             period: Period::from_date(updated_at.date()),
+            group_id,
         }
     }
 
     pub fn from_db(db_rating: &DbRating) -> Rating {
         Self::new(
             db_rating.id,
+            db_rating.group_id.clone(),
             db_rating.restaurant_id.clone(),
             db_rating.user_id.clone(),
             db_rating.username.clone(),

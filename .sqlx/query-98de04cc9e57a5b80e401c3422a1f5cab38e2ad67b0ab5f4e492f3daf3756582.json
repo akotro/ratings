@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, restaurant_id, user_id, score, username, created_at, updated_at\n         FROM ratings\n         WHERE restaurant_id = ? AND user_id = ?",
+  "query": "SELECT id, group_id, user_id, role, created_at, updated_at\n         FROM group_memberships\n         WHERE id = ?",
   "describe": {
     "columns": [
       {
@@ -15,12 +15,12 @@
       },
       {
         "ordinal": 1,
-        "name": "restaurant_id",
+        "name": "group_id",
         "type_info": {
-          "type": "VarString",
+          "type": "String",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
           "char_set": 224,
-          "max_size": 1020
+          "max_size": 144
         }
       },
       {
@@ -35,26 +35,16 @@
       },
       {
         "ordinal": 3,
-        "name": "score",
+        "name": "role",
         "type_info": {
-          "type": "Float",
-          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
-          "char_set": 63,
-          "max_size": 12
+          "type": "String",
+          "flags": "NOT_NULL | ENUM | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 24
         }
       },
       {
         "ordinal": 4,
-        "name": "username",
-        "type_info": {
-          "type": "VarString",
-          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
-          "char_set": 224,
-          "max_size": 1020
-        }
-      },
-      {
-        "ordinal": 5,
         "name": "created_at",
         "type_info": {
           "type": "Datetime",
@@ -64,7 +54,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 5,
         "name": "updated_at",
         "type_info": {
           "type": "Datetime",
@@ -75,10 +65,9 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
-      false,
       false,
       false,
       false,
@@ -87,5 +76,5 @@
       false
     ]
   },
-  "hash": "362e6c53bd24d53263fe913de9d515a5bf218aadffd06df405cec5280bcad5d2"
+  "hash": "98de04cc9e57a5b80e401c3422a1f5cab38e2ad67b0ab5f4e492f3daf3756582"
 }

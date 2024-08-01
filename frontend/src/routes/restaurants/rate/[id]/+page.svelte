@@ -8,7 +8,7 @@
     RESTAURANT_RATING_COMPLETE_ENDPOINT
   } from '$lib/endpoints';
   import Loading from '$lib/loading.svelte';
-  import type { Rating } from '$lib/models.js';
+  import type { NewRating, Rating } from '$lib/models.js';
   import Chart from '$lib/chart.svelte';
   import { onMount } from 'svelte';
   import { readTokenCookie } from '$lib/auth.js';
@@ -42,13 +42,16 @@
 
   async function get_user_rating() {
     try {
-      if ($user && $user.token.length > 0) {
-        const response = await axios.get(GET_RATING_ENDPOINT($user.id, id), {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer ' + $user.token
+      if ($user && $user.token.length > 0 && $user.groupMembership != null) {
+        const response = await axios.get(
+          GET_RATING_ENDPOINT($user.id, id, $user.groupMembership.group_id),
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + $user.token
+            }
           }
-        });
+        );
         const data = response.data;
         // console.log('Get rating response: ' + JSON.stringify(data));
         if (data && data.success) {
@@ -70,7 +73,7 @@
     rateFailed = false;
 
     try {
-      if ($user && $user.token.length > 0) {
+      if ($user && $user.token.length > 0 && $user.groupMembership != null) {
         const response = await axios.post(
           RATE_ENDPOINT($user.id),
           {
@@ -78,8 +81,9 @@
             restaurant_id: id,
             user_id: $user.id,
             username: $user.username,
-            score: rating
-          },
+            score: rating,
+            group_id: $user.groupMembership.group_id
+          } as NewRating,
           {
             headers: {
               'Content-Type': 'application/json',
@@ -108,13 +112,16 @@
         // console.log('Waiting for rating to be made');
         await new Promise((r) => setTimeout(r, 1000));
       }
-      if ($user && $user.token.length > 0) {
-        const response = await axios.get(RESTAURANT_RATING_COMPLETE_ENDPOINT(id), {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer ' + $user.token
+      if ($user && $user.token.length > 0 && $user.groupMembership != null) {
+        const response = await axios.get(
+          RESTAURANT_RATING_COMPLETE_ENDPOINT(id, $user.groupMembership.group_id),
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + $user.token
+            }
           }
-        });
+        );
         const data = response.data;
         // console.log('Is restaurant rating complete response: ' + JSON.stringify(data));
         if (data && data.success) {
@@ -130,13 +137,16 @@
 
   async function getRestaurantRatings() {
     try {
-      if ($user && $user.token.length > 0) {
-        const response = await axios.get(GET_RESTAURANT_RATINGS_ENDPOINT(id), {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer ' + $user.token
+      if ($user && $user.token.length > 0 && $user.groupMembership != null) {
+        const response = await axios.get(
+          GET_RESTAURANT_RATINGS_ENDPOINT(id, $user.groupMembership.group_id),
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + $user.token
+            }
           }
-        });
+        );
         // await new Promise((r) => setTimeout(r, 1000));
         const data = response.data;
         // console.log('Get restaurant ratings response: ' + JSON.stringify(data));
@@ -168,7 +178,7 @@
   <!-- <div class="flex items-center justify-center my-12"> -->
   <!--   <Loading /> -->
   <!-- </div> -->
-{:else if $user && $user.token.length > 0}
+{:else if $user && $user.token.length > 0 && $user.groupMembership != null}
   {#await get_user_rating()}
     <!-- <div class="flex items-center justify-center my-12"> -->
     <!--   <Loading /> -->
@@ -238,8 +248,12 @@
       {/if}
     {/await}
   {/if}
-{:else}
+{:else if $user == null || $user.token == null}
   <h1 class="p-6 text-8xl text-white text-center">
     Please <a href="/" class="hover:underline dark:text-blue-500">Login</a>
+  </h1>
+{:else if $user.groupMembership == null}
+  <h1 class="p-6 text-8xl text-white text-center">
+    Please <a href="/" class="hover:underline dark:text-blue-500">Select a Group</a>
   </h1>
 {/if}

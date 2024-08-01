@@ -2,6 +2,7 @@
   import { readTokenCookie } from '$lib/auth';
   import Chart from '$lib/chart.svelte';
   import { GET_RATINGS_ENDPOINT } from '$lib/endpoints';
+  import Loading from '$lib/loading.svelte';
   import type { Rating } from '$lib/models';
   import { user } from '$lib/store';
   import axios from 'axios';
@@ -22,9 +23,9 @@
     }
   });
 
-  async function get_ratings(userId: string, token: string) {
+  async function get_ratings(token: string, userId: string, groupId: string) {
     try {
-      const res = await axios.get(GET_RATINGS_ENDPOINT(userId), {
+      const res = await axios.get(GET_RATINGS_ENDPOINT(userId, groupId), {
         headers: {
           'Content-Type': 'application/json',
           Authorization: 'Bearer ' + token
@@ -55,11 +56,11 @@
     <!-- <div class="flex items-center justify-center"> -->
     <!--   <Loading /> -->
     <!-- </div> -->
-  {:else if $user && $user.token.length > 0}
-    {#await get_ratings($user.id, $user.token)}
-      <!-- <div class="flex items-center justify-center"> -->
-      <!--   <Loading /> -->
-      <!-- </div> -->
+  {:else if $user && $user.token.length > 0 && $user.groupMembership != null}
+    {#await get_ratings($user.token, $user.id, $user.groupMembership.group_id)}
+      <div class="flex items-center justify-center">
+        <Loading />
+      </div>
     {:then}
       <div class="table-container flex items-center justify-center my-8">
         <table class="table table-hover">
@@ -95,9 +96,13 @@
         </div>
       {/if}
     {/await}
-  {:else}
+  {:else if $user == null || $user.token == null}
     <h1 class="p-6 text-8xl text-white text-center">
       Please <a href="/" class="hover:underline dark:text-blue-500">Login</a>
+    </h1>
+  {:else if $user.groupMembership == null}
+    <h1 class="p-6 text-8xl text-white text-center">
+      Please <a href="/" class="hover:underline dark:text-blue-500">Select a Group</a>
     </h1>
   {/if}
 </div>

@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "select exists (\n            select 1\n            from group_memberships\n            where user_id = ?\n                and group_id = ?\n         ) as group_membership_exists;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "group_membership_exists",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "699c180383bbf496e92419adbf0174459beb72029ae98798a30113aa12cf73ec"
+}

@@ -4,7 +4,11 @@
   import { LOGIN_ENDPOINT, REGISTER_ENDPOINT } from './endpoints';
   import Loading from './loading.svelte';
   import axios from 'axios';
-  import { setTokenCookie, deleteTokenCookie, readTokenCookie } from './auth';
+  import { setTokenCookie, readTokenCookie, deleteCookies } from './auth';
+  import Groups from './groups.svelte';
+
+  export let showRegister = true;
+  export let loginRedirectUrl: string | null = null;
 
   let username = '';
   let password = '';
@@ -17,6 +21,7 @@
   // TODO: verify token with backend
   let checkingAuth = true;
   onMount(() => {
+    registration = false;
     const token = readTokenCookie();
     if (token) {
       checkingAuth = false;
@@ -65,6 +70,10 @@
           setTokenCookie(data.data.token);
           username = '';
           password = '';
+
+          if (loginRedirectUrl) {
+            window.location.href = loginRedirectUrl;
+          }
         } else {
           loginFailed = true;
         }
@@ -77,7 +86,7 @@
 
   function logout() {
     $user = null;
-    deleteTokenCookie();
+    deleteCookies();
   }
 
   function toggleRegistration() {
@@ -95,10 +104,19 @@
     </h3>
 
     <div class="flex flex-col items-center justify-center">
-      <a class="btn btn-lg variant-ghost-surface my-2 w-full" href="/restaurants"> Restaurants </a>
-      <a class="btn btn-lg variant-ghost-surface my-2 w-full" href="/restaurants/ratings">
-        Ratings
-      </a>
+      {#if $user.groupMembership}
+        <a class="btn btn-lg variant-ghost-surface my-2 w-full" href="/groups"> Groups </a>
+        <a class="btn btn-lg variant-ghost-surface my-2 w-full" href="/restaurants">
+          Restaurants
+        </a>
+        <a class="btn btn-lg variant-ghost-surface my-2 w-full" href="/ratings"> Ratings </a>
+      {:else}
+        <p class="py-2 h4 text-white text-center">Select a group!</p>
+        <Groups />
+      {/if}
+
+      <br />
+      <br />
       <button class="btn btn-lg variant-filled-primary my-2 w-full" on:click={logout}>Logout</button
       >
     </div>
@@ -138,12 +156,14 @@
     {/if}
     <br />
     <br />
-    <a href="./" on:click={toggleRegistration} class="cursor-pointer text-blue-500 mt-4">
-      {#if registration}
-        Already have an account? Login
-      {:else}
-        Don't have an account? Register
-      {/if}
-    </a>
+    {#if showRegister}
+      <a href="./" on:click={toggleRegistration} class="cursor-pointer text-blue-500 mt-4">
+        {#if registration}
+          Already have an account? Login
+        {:else}
+          Don't have an account? Register
+        {/if}
+      </a>
+    {/if}
   </form>
 {/if}

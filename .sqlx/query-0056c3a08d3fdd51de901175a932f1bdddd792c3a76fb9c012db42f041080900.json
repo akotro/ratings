@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM ratings WHERE id = ? AND group_id = ? AND user_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "0056c3a08d3fdd51de901175a932f1bdddd792c3a76fb9c012db42f041080900"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE ratings\n         SET score = ?, username = ?, updated_at = ?\n         WHERE group_id = ? AND user_id = ? AND restaurant_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "d1f625f351b5493abd67541349712b8e1ebc6f5e94b62b0573bbb6eaa763adc2"
+}
