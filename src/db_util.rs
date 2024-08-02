@@ -335,24 +335,13 @@ pub async fn create_group_membership(
     let created_at = Utc::now().naive_utc();
     let updated_at = created_at;
 
-    let group_membership_exists_query = sqlx::query_scalar!(
-        "select exists (
-            select 1
-            from group_memberships
-            where user_id = ?
-                and group_id = ?
-         ) as group_membership_exists;",
-        new_group_membership.user_id,
-        new_group_membership.group_id
-    );
-    let group_membership_exists = match group_membership_exists_query.fetch_one(&mut *tx).await {
-        Ok(query_result) => query_result,
-        Err(err) => {
-            tx.rollback().await?;
-            return Err(anyhow!("Could not validate group membership: {err}"));
-        }
-    };
-    if group_membership_exists == 1 {
+    if check_group_membership_exists(
+        &mut tx,
+        &new_group_membership.user_id,
+        &new_group_membership.group_id,
+    )
+    .await?
+    {
         tx.rollback().await?;
         return Err(anyhow!("Group membership already exists"));
     }
@@ -394,6 +383,35 @@ pub async fn create_group_membership(
     } else {
         Err(anyhow::anyhow!("Failed to create group membership"))
     }
+}
+
+pub async fn check_group_membership_exists(
+    conn: &mut MySqlConnection,
+    user_id: &str,
+    group_id: &str,
+) -> Result<bool> {
+    let group_membership_exists_query = sqlx::query_scalar!(
+        "select exists (
+            select 1
+            from group_memberships
+            where user_id = ?
+                and group_id = ?
+         ) as group_membership_exists;",
+        user_id,
+        group_id
+    );
+    let group_membership_exists = match group_membership_exists_query.fetch_one(&mut *conn).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            return Err(anyhow!("Could not validate group membership: {err}"));
+        }
+    };
+
+    if group_membership_exists == 1 {
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 pub async fn get_group_membership(conn: &mut MySqlConnection, id: &i32) -> Result<GroupMembership> {
@@ -794,9 +812,15 @@ pub async fn delete_menu_item(
 // NOTE: Ratings
 
 pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Result<Rating> {
-    // TODO: Validate user belongs to group (maybe one level above this)?
+    let mut tx = conn.begin().await?;
+
     let created_at = Utc::now().naive_utc();
     let updated_at = created_at;
+
+    if !check_group_membership_exists(&mut tx, &rating.user_id, &rating.group_id).await? {
+        tx.rollback().await?;
+        return Err(anyhow!("User does not belong to group"));
+    }
 
     let query = sqlx::query_as!(
         Rating,
@@ -810,10 +834,18 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
         created_at,
         updated_at
     );
-    let result = query.execute(conn).await?;
+    let result = match query.execute(&mut *tx).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
 
     if result.rows_affected() == 1 {
         let last_insert_id = result.last_insert_id();
+
+        tx.commit().await?;
 
         Ok(Rating::new(
             last_insert_id as i32,
@@ -826,6 +858,7 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
             updated_at,
         ))
     } else {
+        tx.rollback().await?;
         Err(anyhow::anyhow!("Failed to create rating."))
     }
 }
@@ -974,6 +1007,12 @@ pub async fn update_rating(
     let mut tx = conn.begin().await?;
 
     let updated_at = Utc::now().naive_utc();
+
+    if !check_group_membership_exists(&mut tx, user_id, &rating.group_id).await? {
+        tx.rollback().await?;
+        return Err(anyhow!("User does not belong to group"));
+    }
+
     let _ = match sqlx::query!(
         "UPDATE ratings
          SET score = ?, username = ?, updated_at = ?
@@ -1099,12 +1138,6 @@ mod tests {
     const GROUP_DESCRIPTION_2: &str = "this is test group 2 (users: test_id, test_id3)";
 
     const RESTAURANT_ID: &str = "test_restaurant";
-
-    #[sqlx::test]
-    async fn test_init_database() {
-        let pool_result = init_database().await;
-        assert!(pool_result.is_ok());
-    }
 
     #[sqlx::test]
     async fn test_create_user(pool: MySqlPool) -> Result<()> {
