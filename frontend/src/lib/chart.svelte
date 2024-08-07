@@ -8,9 +8,9 @@
     BarElement,
     CategoryScale,
     LinearScale,
-    Colors
+    Colors,
+    type ChartData
   } from 'chart.js';
-  import type { ChartData } from 'chart.js';
 
   export let height = 350;
   export let borderWidth = 2;
@@ -60,11 +60,11 @@
     responsive: true,
     maintainAspectRatio: false,
     scales: {
-        y: {
-            min: 0,
-            max: 10
-          }
+      y: {
+        min: 0,
+        max: 10
       }
+    }
   };
 
   Chart.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, Colors);

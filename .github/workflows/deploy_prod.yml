@@ -1,4 +1,4 @@
-name: Deploy
+name: Deploy Prod
 
 on:
   workflow_run:
@@ -8,11 +8,13 @@ on:
     branches: [ "main" ]
 
 env:
-  HOSTNAME: hoshiko
+  HOSTNAME: tithe
 
 jobs:
   deploy:
+    name: Deploy Prod
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
 
@@ -42,15 +44,15 @@ jobs:
         oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
         oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
         tags: tag:ci
-        version: 1.60.0
+        version: 1.70.0
 
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@main
       with:
         extra-conf: |
           substituters = https://cache.nixos.org/
-          extra-substituters = https://nix-community.cachix.org https://aseipp-nix-cache.global.ssl.fastly.net
-          extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+          extra-substituters = https://nix-community.cachix.org https://aseipp-nix-cache.global.ssl.fastly.net https://nixcache.reflex-frp.org https://cache.iog.io https://digitallyinduced.cachix.org https://ghc-nix.cachix.org https://ic-hs-test.cachix.org https://kaleidogen.cachix.org https://static-haskell-nix.cachix.org https://tttool.cachix.org
+          extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
     - uses: DeterminateSystems/magic-nix-cache-action@main
 
     - name: Checkout external repository
@@ -64,7 +66,7 @@ jobs:
       run: |
         nix flake lock --accept-flake-config --update-input ratings
 
-    - name: Add hoshiko to known hosts
+    - name: Add hostname to known hosts
       id: ssh-known-hosts
       run: |
         mkdir -p ~/.ssh
@@ -79,7 +81,7 @@ jobs:
       if: success()
       run: |
         git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action Ratings Deploy"
+        git config --local user.name "GitHub Action Ratings Deploy Prod"
         git add .
         git commit -m "chore: update ratings flake input" -a || echo "No changes to commit"
         git push

@@ -181,7 +181,7 @@
                         class="flex-grow space-x-2 btn btn-md variant-outline"
                         on:click|preventDefault={() => setGroup(group_membership)}
                       >
-                        <span class="badge bg-violet-500"> \ </span>
+                        <span class="badge bg-violet-500"> 👥 </span>
                         <span class="group-name flex-auto">{group_membership.group.name}</span>
                       </button>
                       <button
@@ -205,7 +205,7 @@
                         class="flex-grow space-x-2 btn btn-md variant-outline"
                         on:click|preventDefault={() => setGroup(group_membership)}
                       >
-                        <span class="badge bg-violet-500"> \ </span>
+                        <span class="badge bg-violet-500"> 👥 </span>
                         <span class="group-name flex-auto">{group_membership.group.name}</span>
                       </button>
                     </li>
