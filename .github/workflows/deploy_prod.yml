@@ -9,6 +9,7 @@ on:
 
 env:
   HOSTNAME: tithe
+  FLAKE_INPUT: ratings
 
 jobs:
   deploy:
@@ -64,7 +65,7 @@ jobs:
 
     - name: Update flake input
       run: |
-        nix flake lock --accept-flake-config --update-input ratings
+        nix flake lock --accept-flake-config --update-input $FLAKE_INPUT
 
     - name: Add hostname to known hosts
       id: ssh-known-hosts
@@ -83,6 +84,6 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action Ratings Deploy Prod"
         git add .
-        git commit -m "chore: update ratings flake input" -a || echo "No changes to commit"
+        git commit -m "chore: update $FLAKE_INPUT flake input" -a || echo "No changes to commit"
         git push
 
