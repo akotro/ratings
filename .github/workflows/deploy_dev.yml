@@ -81,6 +81,8 @@ jobs:
     - name: Commit and push changes
       if: success()
       run: |
+        git fetch --prune origin
+        git merge origin/main --ff-only
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action Ratings Deploy Dev"
         git add .
