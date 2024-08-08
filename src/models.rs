@@ -11,6 +11,7 @@ pub struct User {
     pub token: String,
     pub username: String,
     pub password: String,
+    pub color: String,
     pub ratings: Vec<Rating>,
     pub group_memberships: Vec<GroupMembership>,
 }
@@ -168,6 +169,7 @@ pub struct Rating {
     pub updated_at: NaiveDateTime,
     pub period: Period,
     pub group_id: String,
+    pub color: Option<String>,
 }
 
 impl Default for Rating {
@@ -183,6 +185,7 @@ impl Default for Rating {
             username: Default::default(),
             score: Default::default(),
             group_id: Default::default(),
+            color: Default::default(),
         }
     }
 }
@@ -198,6 +201,7 @@ impl Rating {
         score: f32,
         created_at: NaiveDateTime,
         updated_at: NaiveDateTime,
+        color: Option<String>,
     ) -> Rating {
         Self {
             id,
@@ -209,6 +213,7 @@ impl Rating {
             updated_at,
             period: Period::from_date(updated_at.date()),
             group_id,
+            color,
         }
     }
 
@@ -222,6 +227,7 @@ impl Rating {
             db_rating.score,
             db_rating.created_at,
             db_rating.updated_at,
+            db_rating.color.clone(),
         )
     }
 }

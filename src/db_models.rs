@@ -8,6 +8,7 @@ pub struct DbUser {
     pub id: String,
     pub username: String,
     pub password: String,
+    pub color: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -15,6 +16,7 @@ pub struct NewUser {
     pub id: String,
     pub username: String,
     pub password: String,
+    pub color: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -85,6 +87,7 @@ pub struct DbRating {
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
     pub group_id: String,
+    pub color: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

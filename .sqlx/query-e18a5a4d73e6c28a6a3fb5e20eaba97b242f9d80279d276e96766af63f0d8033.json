@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, username, password FROM users WHERE username = ?",
+  "query": "SELECT id, username, password, color FROM users WHERE username = ?",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,16 @@
           "char_set": 224,
           "max_size": 262140
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "color",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 28
+        }
       }
     ],
     "parameters": {
@@ -40,8 +50,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "08175dfa554ee93c6f0b215d057cddc580df5b9643966acd54cf401be6df76b2"
+  "hash": "e18a5a4d73e6c28a6a3fb5e20eaba97b242f9d80279d276e96766af63f0d8033"
 }

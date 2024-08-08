@@ -38,6 +38,7 @@ async fn register_user_route(
                 id: db_user.id,
                 username: db_user.username,
                 password: db_user.password,
+                color: db_user.color,
                 token: token.clone(),
                 ratings: db_user.ratings,
                 group_memberships: db_user.group_memberships,

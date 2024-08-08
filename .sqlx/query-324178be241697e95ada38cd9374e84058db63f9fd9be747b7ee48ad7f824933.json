@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at\n         FROM ratings\n         WHERE user_id = ?",
+  "query": "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color\n         FROM ratings r\n         JOIN users u on u.id = r.user_id\n         WHERE group_id = ? and restaurant_id = ?",
   "describe": {
     "columns": [
       {
@@ -82,12 +82,23 @@
           "char_set": 63,
           "max_size": 19
         }
+      },
+      {
+        "ordinal": 8,
+        "name": "color",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 28
+        }
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 2
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -98,5 +109,5 @@
       false
     ]
   },
-  "hash": "4efe414dd0ead1f0314f0e01b91d122f3fef79a69173d87c6bbaea44273b3aa4"
+  "hash": "324178be241697e95ada38cd9374e84058db63f9fd9be747b7ee48ad7f824933"
 }

@@ -55,10 +55,11 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
 
     let query = sqlx::query_as!(
         User,
-        "INSERT INTO users (id, username, password) VALUES (?, ?, ?)",
+        "INSERT INTO users (id, username, password, color) VALUES (?, ?, ?, ?)",
         new_user.id,
         new_user.username,
-        new_user.password
+        new_user.password,
+        new_user.color
     );
     let result = match query.execute(&mut *tx).await {
         Ok(query_result) => query_result,
@@ -87,6 +88,7 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
             id: db_user.id,
             username: db_user.username,
             password: db_user.password,
+            color: db_user.color,
             token: String::new(),
             ratings: Vec::new(),
             group_memberships: Vec::new(),
@@ -96,7 +98,7 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
     }
 }
 pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
-    let db_users = sqlx::query_as!(DbUser, "SELECT id, username, password FROM users")
+    let db_users = sqlx::query_as!(DbUser, "SELECT id, username, password, color FROM users")
         .fetch_all(pool)
         .await?;
 
@@ -120,6 +122,7 @@ pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
                     token: String::new(),
                     username: db_user.username,
                     password: db_user.password,
+                    color: db_user.color,
                     ratings,
                     group_memberships,
                 })
@@ -140,7 +143,7 @@ pub async fn get_user_by_credentials(
 
     let query = sqlx::query_as!(
         DbUser,
-        "SELECT id, username, password FROM users WHERE username = ?",
+        "SELECT id, username, password, color FROM users WHERE username = ?",
         username
     );
     let db_user_result = match query.fetch_optional(&mut *tx).await {
@@ -177,6 +180,7 @@ pub async fn get_user_by_credentials(
                 token: String::new(),
                 username: db_user.username,
                 password: db_user.password,
+                color: db_user.color,
                 ratings,
                 group_memberships,
             }))
@@ -856,6 +860,7 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
             rating.score,
             created_at,
             updated_at,
+            None,
         ))
     } else {
         tx.rollback().await?;
@@ -866,8 +871,9 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
 pub async fn get_ratings_by_user(conn: &mut MySqlConnection, user_id: &str) -> Result<Vec<Rating>> {
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at
-         FROM ratings
+        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+         FROM ratings r
+         JOIN users u on u.id = r.user_id
          WHERE user_id = ?",
         user_id,
     );
@@ -888,8 +894,9 @@ pub async fn get_ratings_by_user_and_group(
 ) -> Result<Vec<Rating>> {
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at
-         FROM ratings
+        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+         FROM ratings r
+         JOIN users u on u.id = r.user_id
          WHERE user_id = ? and group_id = ?",
         user_id,
         group_id
@@ -911,8 +918,9 @@ pub async fn get_ratings_by_restaurant(
 ) -> Result<Vec<Rating>> {
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at
-         FROM ratings
+        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+         FROM ratings r
+         JOIN users u on u.id = r.user_id
          WHERE group_id = ? and restaurant_id = ?",
         group_id,
         restaurant_id
@@ -938,8 +946,9 @@ pub async fn get_ratings_by_restaurant_per_period(
 
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at
-         FROM ratings
+        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+         FROM ratings r
+         JOIN users u on u.id = r.user_id
          WHERE group_id = ? and restaurant_id = ? AND created_at >= ? AND created_at <= ?",
         group_id,
         restaurant_id,
@@ -964,8 +973,9 @@ pub async fn get_rating(
 ) -> Result<Rating> {
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at
-         FROM ratings
+        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+         FROM ratings r
+         JOIN users u on u.id = r.user_id
          WHERE user_id = ? AND group_id = ? AND restaurant_id = ?",
         user_id,
         group_id,
@@ -987,8 +997,9 @@ pub async fn is_restaurant_rated_by_user(
 ) -> Result<bool> {
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT id, group_id, restaurant_id, user_id, score, username, created_at, updated_at
-         FROM ratings
+        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+         FROM ratings r
+         JOIN users u on u.id = r.user_id
          WHERE restaurant_id = ? AND user_id = ? AND group_id = ?",
         restaurant_id,
         user_id,
@@ -1126,6 +1137,7 @@ mod tests {
     const USER_ID_1: &str = "test_id";
     const USER_USERNAME_1: &str = "test_username";
     const USER_PASSWORD_1: &str = "test_password";
+    const USER_COLOR_1: &str = "#9a79cf";
     const USER_ID_2: &str = "test_id2";
     const USER_USERNAME_2: &str = "test_username2";
     const USER_ID_3: &str = "test_id3";
@@ -1145,6 +1157,7 @@ mod tests {
             id: USER_ID_1.to_owned(),
             username: USER_USERNAME_1.to_owned(),
             password: USER_PASSWORD_1.to_owned(),
+            color: USER_COLOR_1.to_owned(),
         };
 
         let mut conn = get_connection(&pool)
@@ -1157,6 +1170,7 @@ mod tests {
         assert_eq!(user.id, new_user.id);
         assert_eq!(user.username, new_user.username);
         assert_eq!(user.password, new_user.password);
+        assert_eq!(user.color, new_user.color);
 
         Ok(())
     }
@@ -1173,6 +1187,7 @@ mod tests {
         assert_eq!(user.id, USER_ID_1);
         assert_eq!(user.username, USER_USERNAME_1);
         assert_eq!(user.password, USER_PASSWORD_1);
+        assert_eq!(user.color, USER_COLOR_1);
         assert_eq!(
             user.group_memberships
                 .iter()
@@ -1204,6 +1219,7 @@ mod tests {
         assert_eq!(user.id, USER_ID_1);
         assert_eq!(user.username, USER_USERNAME_1);
         assert_eq!(user.password, USER_PASSWORD_1);
+        assert_eq!(user.color, USER_COLOR_1);
         assert_eq!(
             user.group_memberships
                 .iter()
@@ -1229,6 +1245,7 @@ mod tests {
             id: USER_ID_1.to_owned(),
             username: USER_USERNAME_1.to_owned(),
             password: USER_PASSWORD_1.to_owned(),
+            color: USER_COLOR_1.to_owned(),
             ..Default::default()
         };
 
@@ -1670,6 +1687,7 @@ mod tests {
         let rating = ratings_by_user.first().unwrap();
         assert_eq!(rating.user_id, USER_ID_1);
         assert_eq!(rating.group_id, GROUP_ID_1);
+        assert_eq!(rating.color, Some(USER_COLOR_1.to_owned()));
 
         Ok(())
     }
@@ -1694,6 +1712,7 @@ mod tests {
         for rating in ratings_by_restaurant {
             assert_eq!(rating.restaurant_id, RESTAURANT_ID);
             assert_eq!(rating.group_id, GROUP_ID_1);
+            assert!(rating.color.is_some());
         }
 
         Ok(())
@@ -1731,6 +1750,7 @@ mod tests {
             assert_eq!(rating.restaurant_id, RESTAURANT_ID);
             assert_eq!(rating.created_at.year(), current_year);
             assert_eq!(rating.period, current_period);
+            assert!(rating.color.is_some());
         }
 
         Ok(())
@@ -1752,6 +1772,7 @@ mod tests {
         assert_eq!(rating.group_id, GROUP_ID_1);
         assert_eq!(rating.user_id, USER_ID_1);
         assert_eq!(rating.restaurant_id, RESTAURANT_ID);
+        assert_eq!(rating.color, Some(USER_COLOR_1.to_owned()));
 
         Ok(())
     }

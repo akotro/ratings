@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, username, password FROM users",
+  "query": "SELECT id, username, password, color FROM users",
   "describe": {
     "columns": [
       {
@@ -32,6 +32,16 @@
           "char_set": 224,
           "max_size": 262140
         }
+      },
+      {
+        "ordinal": 3,
+        "name": "color",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 28
+        }
       }
     ],
     "parameters": {
@@ -40,8 +50,9 @@
     "nullable": [
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "ff66c6efcd015c7792de221f6e1ed049e49c5881184ef271816bbf28af7f6021"
+  "hash": "781ca8dd036647dfee310a07d559fe99c6e1a84c6f90ce6b147fa684f3ff8ac6"
 }

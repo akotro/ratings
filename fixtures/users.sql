@@ -1,7 +1,7 @@
-INSERT INTO users (id, username, password) VALUES
-    ('test_id', 'test_username', 'test_password'),
-    ('test_id2', 'test_username2', 'test_password2'),
-    ('test_id3', 'test_username3', 'test_password3');
+INSERT INTO users (id, username, password, color) VALUES
+    ('test_id', 'test_username', 'test_password', '#9a79cf'),
+    ('test_id2', 'test_username2', 'test_password2', '#00c260'),
+    ('test_id3', 'test_username3', 'test_password3', '#496287');
 
 INSERT INTO groups (id, name, description) VALUES
     ("test_group_id1", "test_group1", "this is test group 1 (users: test_id, test_id2)"),
