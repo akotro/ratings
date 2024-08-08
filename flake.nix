@@ -116,6 +116,7 @@
       devShells.default = pkgs.mkShell {
         packages = [
           pkgs.nil
+          pkgs.node2nix
           pkgs.sqlx-cli
           pkgs.libmysqlclient.dev
         ];

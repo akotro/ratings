@@ -1165,6 +1165,15 @@ let
         sha512 = "dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==";
       };
     };
+    "colord-2.9.3" = {
+      name = "colord";
+      packageName = "colord";
+      version = "2.9.3";
+      src = fetchurl {
+        url = "https://registry.npmjs.org/colord/-/colord-2.9.3.tgz";
+        sha512 = "jeC1axXpnb0/2nn/Y1LPuLdgXBLH7aDcHu4KEKfqw3CUhX7ZpfBSlPKyqXE6btIgEzfWtrX3/tyBCaCvXvMkOw==";
+      };
+    };
     "combined-stream-1.0.8" = {
       name = "combined-stream";
       packageName = "combined-stream";
@@ -3181,6 +3190,24 @@ let
         sha512 = "Ep06yCaCdgG1Mafb/Rx8sJ1QS3RW2I2BxGp2Ui9LBHSZ2/tO/aGLc5WqPjgiAP6KAnLJGaIr/zzwQlOo1b8MxA==";
       };
     };
+    "svelte-awesome-color-picker-3.1.3" = {
+      name = "svelte-awesome-color-picker";
+      packageName = "svelte-awesome-color-picker";
+      version = "3.1.3";
+      src = fetchurl {
+        url = "https://registry.npmjs.org/svelte-awesome-color-picker/-/svelte-awesome-color-picker-3.1.3.tgz";
+        sha512 = "BOwB8nsARVEJOThk4b0EXpM2AIDGrC5ir4rFzSX0E4O3GAonBX6QXMJfU6diyPGlINt2RwihYXtdSttGIFtwSQ==";
+      };
+    };
+    "svelte-awesome-slider-1.1.1" = {
+      name = "svelte-awesome-slider";
+      packageName = "svelte-awesome-slider";
+      version = "1.1.1";
+      src = fetchurl {
+        url = "https://registry.npmjs.org/svelte-awesome-slider/-/svelte-awesome-slider-1.1.1.tgz";
+        sha512 = "EnovI8mYVSaRKUS+xCFJeRFewsRDc9Pt3LjNOgL5HARLpDH4NRzEI2wFZL5a54BuhBZaluj58ErjMuYcs/a62g==";
+      };
+    };
     "svelte-chartjs-3.1.5" = {
       name = "svelte-chartjs";
       packageName = "svelte-chartjs";
@@ -3651,6 +3678,7 @@ let
       })
       sources."color-convert-2.0.1"
       sources."color-name-1.1.4"
+      sources."colord-2.9.3"
       sources."combined-stream-1.0.8"
       sources."commander-11.1.0"
       sources."commondir-1.0.1"
@@ -3940,6 +3968,8 @@ let
           sources."is-reference-3.0.2"
         ];
       })
+      sources."svelte-awesome-color-picker-3.1.3"
+      sources."svelte-awesome-slider-1.1.1"
       sources."svelte-chartjs-3.1.5"
       sources."svelte-check-3.6.4"
       sources."svelte-eslint-parser-0.33.1"

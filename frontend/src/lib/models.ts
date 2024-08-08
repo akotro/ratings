@@ -2,6 +2,7 @@ export interface User {
   id: string;
   username: string;
   password: string;
+  color: string;
   token: string;
   groupMembership: GroupMembership | null;
 }
@@ -51,6 +52,7 @@ export interface Rating {
   created_at: Date;
   updated_at: Date;
   period: Period;
+  color: string | undefined;
 }
 
 export interface NewRating {

@@ -14,7 +14,11 @@
 
   export let height = 350;
   export let borderWidth = 2;
-  export let backgroundColor = [
+  export let labels = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange'];
+  export let datasetData = [12, 19, 3, 5, 2, 3];
+
+  export let backgroundColors: string[] | undefined = [];
+  let defaultBackgroundColors: string[] | undefined = [
     'rgba(255, 134, 159, 0.4)',
     'rgba(98, 182, 239, 0.4)',
     'rgba(255, 218, 128, 0.4)',
@@ -27,7 +31,8 @@
     'rgba(35, 107, 142, 0.4)',
     'rgba(185, 62, 77, 0.4)'
   ];
-  export let borderColor = [
+  export let borderColors: string[] | undefined = [];
+  let defaultBorderColors: string[] | undefined = [
     'rgba(255, 134, 159, 1)',
     'rgba(98, 182, 239, 1)',
     'rgba(255, 218, 128, 1)',
@@ -40,8 +45,51 @@
     'rgba(35, 107, 142, 1)',
     'rgba(185, 62, 77, 1)'
   ];
-  export let labels = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange'];
-  export let datasetData = [12, 19, 3, 5, 2, 3];
+
+  type RGBColor = {
+    r: number;
+    g: number;
+    b: number;
+  };
+
+  function hexToRgb(hex: string): RGBColor {
+    hex = hex.replace(/^#/, '');
+
+    const bigint = parseInt(hex, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+
+    return { r, g, b };
+  }
+
+  function rgbToHex(r: number, g: number, b: number): string {
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+  }
+
+  function adjustColorBrightnessRgb(color: RGBColor, factor: number): RGBColor {
+    return {
+      r: Math.min(255, Math.max(0, Math.round(color.r * factor))),
+      g: Math.min(255, Math.max(0, Math.round(color.g * factor))),
+      b: Math.min(255, Math.max(0, Math.round(color.b * factor)))
+    };
+  }
+
+  function adjustColorBrightness(color: string, factor: number): string {
+    let rgbColor = adjustColorBrightnessRgb(hexToRgb(color), factor);
+
+    return rgbToHex(rgbColor.r, rgbColor.g, rgbColor.b);
+  }
+
+  if (backgroundColors && backgroundColors.length > 0) {
+    backgroundColors.forEach((bgColorHex) => {
+      let borderColor = adjustColorBrightness(bgColorHex, 1.5);
+      borderColors?.push(borderColor);
+    });
+  } else {
+    backgroundColors = defaultBackgroundColors;
+    borderColors = defaultBorderColors;
+  }
 
   let data: ChartData<'bar', (number | [number, number])[], unknown> = {
     labels: labels,
@@ -50,15 +98,28 @@
         label: 'Restaurant Score',
         borderWidth: borderWidth,
         data: datasetData,
-        backgroundColor: backgroundColor,
-        borderColor: borderColor
+        backgroundColor: backgroundColors,
+        borderColor: borderColors
       }
     ]
   };
 
+  let delayed = true;
   let options = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: {
+      onComplete: () => {
+        delayed = true;
+      },
+      delay: (context: any) => {
+        let delay = 0;
+        if (context.type === 'data' && context.mode === 'default') {
+          delay = context.dataIndex * 2000;
+        }
+        return delay;
+      }
+    },
     scales: {
       y: {
         min: 0,

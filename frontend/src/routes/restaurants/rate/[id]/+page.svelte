@@ -22,6 +22,7 @@
   let restaurantRatings = Array<Rating>();
   let datasetData = Array<number>();
   let labels = Array<string>();
+  let backgroundColors = Array<string>();
   let averageRating = 0;
   let rateFailed = false;
 
@@ -159,6 +160,9 @@
           restaurantRatings.forEach((rating) => {
             datasetData.push(rating.score);
             labels.push(rating.username);
+            if (rating.color) {
+              backgroundColors.push(rating.color);
+            }
           });
         } else {
           restaurantRatings = Array<Rating>();
@@ -236,7 +240,7 @@
         {:then}
           {#if restaurantRatings.length > 0}
             <div class="my-12 mx-auto max-w-7xl">
-              <Chart {labels} {datasetData} />
+              <Chart {labels} {datasetData} {backgroundColors} />
             </div>
             <div class="flex items-center justify-center my-12">
               <h2 class="text-center text-lg font-bold mb-4">

@@ -6,6 +6,7 @@
   import axios from 'axios';
   import { setTokenCookie, readTokenCookie, deleteCookies } from './auth';
   import Groups from './groups.svelte';
+  import ColorPicker from 'svelte-awesome-color-picker';
 
   export let showRegister = true;
   export let loginRedirectUrl: string | null = null;
@@ -13,8 +14,10 @@
   let username = '';
   let password = '';
   let confirmPassword = '';
+  let hex = '';
   let loginLoading = false;
   let loginFailed = false;
+  let fieldValidationError = false;
   let passwordsMatchError = false;
   let registration = false;
 
@@ -22,6 +25,7 @@
   let checkingAuth = true;
   onMount(() => {
     registration = false;
+    hex = '';
     const token = readTokenCookie();
     if (token) {
       checkingAuth = false;
@@ -34,7 +38,13 @@
 
   async function login() {
     loginFailed = false;
+    fieldValidationError = false;
     passwordsMatchError = false;
+
+    if (!username || !password || (registration && (!confirmPassword || !hex))) {
+      fieldValidationError = true;
+      return;
+    }
 
     if (registration) {
       if (password !== confirmPassword) {
@@ -44,7 +54,12 @@
 
       try {
         loginLoading = true;
-        const response = await axios.post(REGISTER_ENDPOINT, { id: '', username, password });
+        const response = await axios.post(REGISTER_ENDPOINT, {
+          id: '',
+          username,
+          password,
+          color: hex
+        });
         const data = response.data;
         if (data.success && data.data) {
           $user = data.data;
@@ -62,7 +77,12 @@
     } else {
       try {
         loginLoading = true;
-        const response = await axios.post(LOGIN_ENDPOINT, { id: '', username, password });
+        const response = await axios.post(LOGIN_ENDPOINT, {
+          id: '',
+          username,
+          password,
+          color: ''
+        });
         const data = response.data;
         if (data.success && data.data) {
           $user = data.data;
@@ -91,6 +111,7 @@
 
   function toggleRegistration() {
     registration = !registration;
+    fieldValidationError = false;
     passwordsMatchError = false;
   }
 </script>
@@ -136,6 +157,25 @@
         <span class="text-xl">Confirm Password</span>
         <input class="input" type="password" bind:value={confirmPassword} />
       </label>
+      <br />
+      <label class="label flex items-center space-x-2">
+        <style>
+          .darkColorPicker {
+            --cp-bg-color: #4e3c8b;
+            --cp-border-color: #15171f;
+            --cp-text-color: #dfe0e2;
+            --cp-input-color: #212432;
+            --cp-button-hover-color: #8a95ca;
+          }
+        </style>
+        <div class="rounded-full variant-outline flex-1 darkColorPicker">
+          <ColorPicker bind:hex position="responsive" />
+        </div>
+        <input class="input flex-1" type="text" bind:value={hex} readonly />
+      </label>
+    {/if}
+    {#if fieldValidationError}
+      <p class="text-red-500">All fields are required. Please fill them out.</p>
     {/if}
     {#if passwordsMatchError}
       <p class="text-red-500">Passwords do not match. Please try again.</p>
