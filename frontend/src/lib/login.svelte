@@ -169,7 +169,7 @@
           }
         </style>
         <div class="rounded-full variant-outline flex-1 darkColorPicker">
-          <ColorPicker bind:hex position="responsive" />
+          <ColorPicker bind:hex isAlpha={false} position="responsive" />
         </div>
         <input class="input flex-1" type="text" bind:value={hex} readonly />
       </label>
