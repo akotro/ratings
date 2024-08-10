@@ -107,6 +107,31 @@ async fn get_users_route(pool: web::Data<MySqlPool>, req: HttpRequest) -> HttpRe
     }
 }
 
+#[put("/users/{id}")]
+async fn update_user_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    id: web::Path<String>,
+    user: web::Json<NewUser>,
+) -> HttpResponse {
+    if let Err(err) = auth::validate_ip(&req) {
+        return err;
+    }
+
+    if let Err(err) = auth::validate_token(&req) {
+        return err;
+    }
+
+    let mut conn = db_util::get_connection(&pool).await.unwrap();
+    let result = db_util::update_user(&mut conn, &id, &user).await;
+    match result {
+        Ok(updated_user) => HttpResponse::Ok().json(ApiResponse::success(updated_user)),
+        Err(error) => {
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
+        }
+    }
+}
+
 #[delete("/users/{id}")]
 async fn delete_user_route(
     pool: web::Data<MySqlPool>,

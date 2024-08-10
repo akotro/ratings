@@ -51,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
                     .app_data(secret_key.clone())
                     .app_data(web::JsonConfig::default().error_handler(json_error_handler))
                     .service(get_users_route)
+                    .service(update_user_route)
                     .service(delete_user_route)
                     .service(create_group_route)
                     .service(join_group_route)

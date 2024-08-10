@@ -195,20 +195,45 @@ pub async fn get_user_by_credentials(
 pub async fn update_user(
     conn: &mut MySqlConnection,
     user_id: &str,
-    user: &User,
-) -> Result<MySqlQueryResult> {
-    let result = sqlx::query!(
+    user: &NewUser,
+) -> Result<User> {
+    let mut tx = conn.begin().await?;
+
+    let _ = match sqlx::query!(
         "UPDATE users
-         SET username = ?, password = ?
+         SET username = ?, color = ?
          WHERE id = ?;",
         user.username,
-        user.password,
+        user.color,
         user_id
     )
-    .execute(conn)
-    .await?;
+    .execute(&mut *tx)
+    .await
+    {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not update user: {err}"));
+        }
+    };
 
-    Ok(result)
+    let updated_user = match get_user_by_credentials(&mut tx, &user.username).await {
+        Ok(updated_user_option) => match updated_user_option {
+            Some(updated_user) => updated_user,
+            None => {
+                tx.rollback().await?;
+                return Err(anyhow!("Could not get updated user"));
+            }
+        },
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not get updated user: {err}"));
+        }
+    };
+
+    tx.commit().await?;
+
+    Ok(updated_user)
 }
 
 pub async fn delete_user(conn: &mut MySqlConnection, user_id: &str) -> Result<MySqlQueryResult> {
@@ -1241,19 +1266,35 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
-        let user = User {
+        const NEW_USERNAME: &str = "new_username1";
+        const NEW_COLOR: &str = "#000000";
+        let user = NewUser {
             id: USER_ID_1.to_owned(),
-            username: USER_USERNAME_1.to_owned(),
+            username: NEW_USERNAME.to_owned(),
             password: USER_PASSWORD_1.to_owned(),
-            color: USER_COLOR_1.to_owned(),
-            ..Default::default()
+            color: NEW_COLOR.to_owned(),
         };
 
         let update_user_result = update_user(&mut conn, &user.id, &user).await;
         assert!(update_user_result.is_ok());
 
-        let query_result = update_user_result?;
-        assert_eq!(query_result.rows_affected(), 1);
+        let updated_user = update_user_result?;
+        assert_eq!(updated_user.id, USER_ID_1);
+        assert_eq!(updated_user.username, NEW_USERNAME);
+        assert_eq!(updated_user.password, USER_PASSWORD_1);
+        assert_eq!(updated_user.color, NEW_COLOR);
+        assert_eq!(
+            updated_user
+                .group_memberships
+                .iter()
+                .map(|gm| gm.group_id.clone())
+                .collect::<Vec<String>>(),
+            vec![GROUP_ID_1, GROUP_ID_2]
+        );
+        assert!(updated_user
+            .group_memberships
+            .iter()
+            .all(|gm| gm.role == Role::Admin));
 
         Ok(())
     }
