@@ -97,13 +97,13 @@
     <!-- </div> -->
   {:else if $user && $user.token.length > 0}
     <div class="flex flex-col items-center justify-center px-4">
-      <div class="card p-2">
+      <div class="card p-2 w-full max-w-md">
         <label for="username" class="label block text-center">
           <span class="text-xl">Username</span>
           <div class="input-group input-group-divider grid-cols-[auto_1fr_auto]">
             <input
               id="username"
-              class="input"
+              class="input w-full"
               title="Input (text)"
               type="text"
               placeholder="input text"
@@ -116,10 +116,10 @@
 
       <br />
 
-      <div class="card p-2">
+      <div class="card p-2 w-full max-w-md">
         <label for="color" class="label block text-center">
           <span class="text-xl">Color</span>
-          <div class=" flex items-center space-x-2">
+          <div class="flex items-center space-x-2">
             <style>
               .darkColorPicker {
                 --cp-bg-color: #4e3c8b;
@@ -132,8 +132,8 @@
             <div class="rounded-full variant-outline flex-1 darkColorPicker">
               <ColorPicker bind:hex isAlpha={false} position="responsive" label="" />
             </div>
-            <div class="input-group input-group-divider grid-cols-[auto_1fr_auto]">
-              <input id="color" class="input flex-1" type="text" bind:value={hex} readonly />
+            <div class="input-group input-group-divider grid-cols-[auto_1fr_auto] w-full">
+              <input id="color" class="input w-full" type="text" bind:value={hex} readonly />
               <button class="variant-filled-surface" on:click={resetColor}>Reset</button>
             </div>
           </div>
