@@ -6,6 +6,7 @@
   import { onMount } from 'svelte';
   import { readTokenCookie } from '$lib/auth';
   import Loading from '$lib/loading.svelte';
+  import { page } from '$app/stores';
 
   let restaurants: Array<[Restaurant, number]> = [];
 
@@ -70,7 +71,10 @@
     {/await}
   {:else if $user == null || $user.token == null}
     <h1 class="p-6 text-8xl text-white text-center">
-      Please <a href="/" class="hover:underline dark:text-blue-500">Login</a>
+      Please <a
+        href={$page ? `/login?redirect=${$page.route.id}` : '/'}
+        class="hover:underline dark:text-blue-500">Login</a
+      >
     </h1>
   {:else if $user.groupMembership == null}
     <h1 class="p-6 text-8xl text-white text-center">

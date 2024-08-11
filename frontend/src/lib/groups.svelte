@@ -14,6 +14,7 @@
   import { Role, type GroupMembership } from './models';
   import { goto } from '$app/navigation';
   import { getToastStore, type ToastSettings } from '@skeletonlabs/skeleton';
+  import { page } from '$app/stores';
 
   const toastStore = getToastStore();
 
@@ -229,7 +230,10 @@
       </div>
     {:else}
       <h1 class="p-6 text-8xl text-white text-center">
-        Please <a href="/" class="hover:underline dark:text-blue-500">Login</a>
+        Please <a
+          href={$page ? `/login?redirect=${$page.route.id}` : '/'}
+          class="hover:underline dark:text-blue-500">Login</a
+        >
       </h1>
     {/if}
   </div>

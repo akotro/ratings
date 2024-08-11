@@ -56,9 +56,9 @@
     drawerStore.open(drawerSettings);
   }
 
-  const logoutPopup: PopupSettings = {
+  const userPopup: PopupSettings = {
     event: 'click',
-    target: 'logoutPopup',
+    target: 'userPopup',
     placement: 'bottom'
   };
 </script>
@@ -102,13 +102,24 @@
           <div class="relative inline-block">
             <button
               class="badge btn-sm variant-filled-secondary cursor-pointer"
-              use:popup={logoutPopup}
+              use:popup={userPopup}
             >
               {$user.username}
             </button>
-            <div class="card" data-popup="logoutPopup">
-              <button class="btn btn-sm variant-filled-primary" on:click={logout}> Logout </button>
-              <div class="arrow variant-filled-primary" />
+            <div class="card p-4 shadow-xl" data-popup="userPopup">
+              <div class="flex flex-col items-center">
+                <a class="btn btn-sm variant-filled-secondary w-full text-center" href="/profile">
+                  Profile
+                </a>
+                <br />
+                <button
+                  class="btn btn-sm variant-filled-primary w-full text-center"
+                  on:click={logout}
+                >
+                  Logout
+                </button>
+                <div class="arrow variant-filled-surface" />
+              </div>
             </div>
           </div>
         {/if}

@@ -5,6 +5,10 @@ export const API_BASE_URL = env.PUBLIC_API_BASE_URL;
 export const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
 export const REGISTER_ENDPOINT = `${API_BASE_URL}/auth/register`;
 
+export function UPDATE_USER_ENDPOINT(userId: string) {
+  return `${API_BASE_URL}/users/${userId}`;
+}
+
 export function GET_GROUP_MEMBERSHIPS_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/groups/${userId}`;
 }

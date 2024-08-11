@@ -4,7 +4,7 @@
   import { LOGIN_ENDPOINT, REGISTER_ENDPOINT } from './endpoints';
   import Loading from './loading.svelte';
   import axios from 'axios';
-  import { setTokenCookie, readTokenCookie, deleteCookies } from './auth';
+  import { setTokenCookie, readTokenCookie, deleteCookies, setUserCookies } from './auth';
   import Groups from './groups.svelte';
   import ColorPicker from 'svelte-awesome-color-picker';
 
@@ -64,7 +64,7 @@
         if (data.success && data.data) {
           $user = data.data;
           dispatch('login', data.data);
-          setTokenCookie(data.data.token);
+          setUserCookies(data.data.token, data.data.color);
           username = '';
           password = '';
           confirmPassword = '';
@@ -87,7 +87,7 @@
         if (data.success && data.data) {
           $user = data.data;
           dispatch('login', data.data);
-          setTokenCookie(data.data.token);
+          setUserCookies(data.data.token, data.data.color);
           username = '';
           password = '';
 
