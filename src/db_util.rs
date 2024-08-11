@@ -199,6 +199,15 @@ pub async fn update_user(
 ) -> Result<User> {
     let mut tx = conn.begin().await?;
 
+    let existing_user = get_user_by_credentials(&mut tx, &user.username).await;
+    if existing_user.is_ok_and(|u| u.is_some()) {
+        tx.rollback().await?;
+        return Err(anyhow!(
+            "User already exists with username: {}",
+            user.username
+        ));
+    }
+
     let _ = match sqlx::query!(
         "UPDATE users
          SET username = ?, color = ?
