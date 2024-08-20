@@ -7,10 +7,20 @@
   import { readTokenCookie } from '$lib/auth';
   import Loading from '$lib/loading.svelte';
   import { page } from '$app/stores';
+  import { Autocomplete, popup, type PopupSettings } from '@skeletonlabs/skeleton';
 
   let restaurants: Array<[Restaurant, number]> = [];
+  let filteredRestaurants: Array<[Restaurant, number]> = [];
+  let searchInput = '';
+  let restaurantOptions: Array<{ label: string; value: string }> = [];
+  let popupSettings: PopupSettings = {
+    event: 'focus-click',
+    target: 'popupAutocomplete',
+    placement: 'bottom'
+  };
 
   let checkingAuth = true;
+
   onMount(() => {
     const token = readTokenCookie();
     if (token) {
@@ -28,13 +38,37 @@
       }
     });
     var data = await res.data;
-    // await new Promise((r) => setTimeout(r, 500));
     if (data.success && data.data) {
       restaurants = data.data;
+      filteredRestaurants = [...restaurants];
+      restaurantOptions = restaurants.map(([restaurant]) => ({
+        label: restaurant.id,
+        value: restaurant.id
+      }));
     } else {
       throw new Error('Failed getting restaurants');
     }
   }
+
+  $: filterRestaurants();
+  $: {
+    if (searchInput.trim() === '') {
+      filteredRestaurants = [...restaurants];
+    } else {
+      filterRestaurants();
+    }
+  }
+
+  function filterRestaurants() {
+    filteredRestaurants = restaurants.filter(([restaurant]) =>
+      restaurant.id.toLowerCase().includes(searchInput.toLowerCase())
+    );
+  }
+
+  // function onRestaurantSelection(event: CustomEvent<{ label: string; value: string }>): void {
+  //   searchInput = event.detail.label;
+  //   filterRestaurants();
+  // }
 </script>
 
 <div class="flex flex-col items-center justify-center">
@@ -44,31 +78,45 @@
     <!--   <Loading /> -->
     <!-- </div> -->
   {:else if $user && $user.token.length > 0 && $user.groupMembership != null}
-    {#await get_restaurants($user.token, $user.groupMembership.group_id)}
-      <div class="flex items-center justify-center my-12">
-        <Loading />
-      </div>
-    {:then}
-      <nav class="list-nav">
-        <!-- (optionally you can provide a label here) -->
-        <ul>
-          {#each restaurants as [restaurant, avg_rating]}
-            <li>
-              <a href="/restaurants/rate/{restaurant.id}">
-                <span class="badge bg-tertiary-500">🍽️</span>
-                <span class="flex-auto">{restaurant.id}</span>
-                {#if avg_rating > 0}
-                  <span class="badge bg-secondary-500">{avg_rating.toFixed(2)}</span>
-                {/if}
-              </a>
-            </li>
-          {/each}
-          <li />
-        </ul>
-      </nav>
-    {:catch error}
-      <p style="color: red">{error.message}</p>
-    {/await}
+    <div class="flex flex-col w-full max-w-lg">
+      <input
+        class="input autocomplete mb-4"
+        type="search"
+        name="autocomplete-search"
+        bind:value={searchInput}
+        placeholder="Search..."
+        use:popup={popupSettings}
+      />
+
+      {#await get_restaurants($user.token, $user.groupMembership.group_id)}
+        <div class="flex items-center justify-center my-12 flex-grow">
+          <Loading />
+        </div>
+      {:then}
+        <nav class="list-nav">
+          <ul class="space-y-2">
+            {#each filteredRestaurants as [restaurant, avg_rating]}
+              <li>
+                <a
+                  href="/restaurants/rate/{restaurant.id}"
+                  class="flex items-center justify-between w-full"
+                >
+                  <div class="flex items-center">
+                    <span class="badge bg-tertiary-500 mr-2">🍽️</span>
+                    <span class="text-left">{restaurant.id}</span>
+                  </div>
+                  {#if avg_rating > 0}
+                    <span class="badge bg-secondary-500">{avg_rating.toFixed(2)}</span>
+                  {/if}
+                </a>
+              </li>
+            {/each}
+          </ul>
+        </nav>
+      {:catch error}
+        <p class="text-red-500">{error.message}</p>
+      {/await}
+    </div>
   {:else if $user == null || $user.token == null}
     <h1 class="p-6 text-8xl text-white text-center">
       Please <a

@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     if cfg!(debug_assertions) {
-        server_config.bind(("127.0.0.1", 5959))?.run().await?;
+        server_config.bind(("127.0.0.1", 5958))?.run().await?;
     } else {
         server_config.bind(("0.0.0.0", 5959))?.run().await?;
     }

@@ -188,7 +188,7 @@
     <!--   <Loading /> -->
     <!-- </div> -->
   {:then}
-    <h1 class="text-center text-6xl font-bold my-4 mb-4">{id}</h1>
+    <h1 class="text-center text-5xl font-bold my-4 mb-4">{id}</h1>
     <h2 class="text-center text-xl font-bold mb-4">Rate It!</h2>
 
     <div class="flex text-center justify-center space-x-2">
