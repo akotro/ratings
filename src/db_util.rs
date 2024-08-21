@@ -713,11 +713,37 @@ pub async fn get_restaurants_with_avg_rating(
     let mut tx = Acquire::begin(conn).await?;
 
     let db_restaurants_with_avg_rating_result = sqlx::query!(
-        "SELECT r.id, r.cuisine, IFNULL(AVG(ra.score), 0) AS avg_rating
-         FROM restaurants r
-         LEFT JOIN ratings ra ON ra.group_id = ? and ra.restaurant_id = r.id
-         GROUP BY r.id
-         ORDER BY avg_rating DESC, r.id",
+        "SELECT *
+         FROM (
+            SELECT r.id, r.cuisine,
+                IF(
+                    (
+                        SELECT COUNT(*) FROM group_memberships gm
+                        WHERE gm.group_id = ?
+                    ) = (
+                        SELECT COUNT(*) FROM ratings ra2
+                        WHERE ra2.group_id = ? AND ra2.restaurant_id = r.id
+                    ),
+                    AVG(ra.score), 
+                    NULL
+                ) AS avg_rating,
+                COUNT(ra.score) AS num_ratings,
+                (
+                    SELECT COUNT(*) FROM ratings ra3
+                    WHERE ra3.group_id = ? AND ra3.restaurant_id = r.id
+                ) AS has_any_rating
+             FROM restaurants r
+             LEFT JOIN ratings ra ON ra.group_id = ? AND ra.restaurant_id = r.id
+             GROUP BY r.id
+         ) AS subquery
+         ORDER BY 
+            avg_rating IS NULL ASC,
+            has_any_rating DESC,
+            avg_rating DESC,
+            id",
+        group_id,
+        group_id,
+        group_id,
         group_id
     )
     .fetch_all(&mut *tx)
@@ -725,7 +751,7 @@ pub async fn get_restaurants_with_avg_rating(
 
     let db_restaurants_with_avg_rating_result = match db_restaurants_with_avg_rating_result {
         Ok(rows) => {
-            let mapped_rows: Result<Vec<(DbRestaurant, f64)>, Error> = rows
+            let mapped_rows: Result<Vec<(DbRestaurant, Option<f64>)>, Error> = rows
                 .into_iter()
                 .map(|row| {
                     Ok((
@@ -762,7 +788,7 @@ pub async fn get_restaurants_with_avg_rating(
                 cuisine: db_restaurant.cuisine.clone(),
                 menu,
             },
-            avg_rating,
+            avg_rating.unwrap_or(0.0),
         ));
     }
 
