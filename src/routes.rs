@@ -368,7 +368,7 @@ async fn get_restaurant_ratings_per_period_route(
         group_id,
         &restaurant_id,
         year,
-        period,
+        &period,
     )
     .await;
     match result {
@@ -490,6 +490,7 @@ async fn get_ratings_route(
     }
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
+    // TODO: This should also get historical data so we can display a line chart
     let result = db_util::get_ratings_by_user(&mut conn, &user_id).await;
     match result {
         Ok(ratings) => HttpResponse::Ok().json(ApiResponse::success(ratings)),

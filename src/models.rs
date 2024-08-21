@@ -99,6 +99,18 @@ pub enum Period {
     Q4,
 }
 
+impl std::convert::From<i32> for Period {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => Self::Q1,
+            1 => Self::Q2,
+            2 => Self::Q3,
+            3 => Self::Q4,
+            _ => unreachable!(),
+        }
+    }
+}
+
 impl Period {
     pub fn from_date(date: NaiveDate) -> Self {
         match date.month() {
@@ -230,6 +242,21 @@ impl Rating {
             db_rating.color.clone(),
         )
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RatingsByPeriod {
+    pub current_year: i32,
+    pub current_period: Period,
+    pub current_period_ratings: Vec<Rating>,
+    pub historical_ratings: Vec<AverageRatingPerPeriod>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AverageRatingPerPeriod {
+    pub year: i32,
+    pub period: Period,
+    pub average_score: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

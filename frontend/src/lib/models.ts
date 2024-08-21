@@ -62,3 +62,16 @@ export interface NewRating {
   score: number;
   group_id: string;
 }
+
+export interface RatingsByPeriod {
+  current_year: number;
+  current_period: Period;
+  current_period_ratings: Array<Rating>;
+  historical_ratings: Array<AverageRatingPerPeriod>;
+}
+
+export interface AverageRatingPerPeriod {
+  year: number;
+  period: Period;
+  average_score: number;
+}

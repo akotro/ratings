@@ -3,7 +3,7 @@
 use std::{env, result::Result::Ok, str::FromStr};
 
 use anyhow::{anyhow, Error, Result};
-use chrono::Utc;
+use chrono::{Datelike, Utc};
 use dotenvy::dotenv;
 use sqlx::{
     migrate,
@@ -975,24 +975,69 @@ pub async fn get_ratings_by_restaurant(
     conn: &mut MySqlConnection,
     restaurant_id: &str,
     group_id: &str,
-) -> Result<Vec<Rating>> {
-    let query = sqlx::query_as!(
-        DbRating,
-        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
-         FROM ratings r
-         JOIN users u on u.id = r.user_id
-         WHERE group_id = ? and restaurant_id = ?",
-        group_id,
-        restaurant_id
-    );
-    let ratings = query
-        .fetch_all(conn)
-        .await?
-        .iter()
-        .map(Rating::from_db)
-        .collect();
+) -> Result<RatingsByPeriod> {
+    let mut tx = conn.begin().await?;
 
-    Ok(ratings)
+    let now = chrono::Utc::now();
+    let current_year = now.year();
+    let current_period = Period::from_date(now.date_naive());
+
+    let current_period_ratings = match get_ratings_by_restaurant_per_period(
+        &mut tx,
+        group_id,
+        restaurant_id,
+        current_year,
+        &current_period,
+    )
+    .await
+    {
+        Ok(current_period_ratings) => current_period_ratings,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
+
+    let historical_average_ratings_query = sqlx::query_as!(
+        AverageRatingPerPeriod,
+        "SELECT
+            IFNULL(YEAR(r.created_at), 0) as year,
+            IFNULL(
+                CASE
+                    WHEN MONTH(r.created_at) BETWEEN 1 AND 3 THEN 0
+                    WHEN MONTH(r.created_at) BETWEEN 4 AND 6 THEN 1
+                    WHEN MONTH(r.created_at) BETWEEN 7 AND 9 THEN 2
+                    ELSE 3
+                END,
+                0
+            ) as period,
+            IFNULL(AVG(r.score), 0) as average_score
+         FROM ratings r
+         WHERE r.group_id = ? AND r.restaurant_id = ?
+         GROUP BY year, period
+         ORDER BY year ASC, period ASC",
+        group_id,
+        restaurant_id,
+    );
+
+    let historical_ratings = match historical_average_ratings_query.fetch_all(&mut *tx).await {
+        Ok(rows) => rows,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
+
+    let ratings_by_period = RatingsByPeriod {
+        current_year,
+        current_period,
+        current_period_ratings,
+        historical_ratings,
+    };
+
+    tx.commit().await?;
+
+    Ok(ratings_by_period)
 }
 
 pub async fn get_ratings_by_restaurant_per_period(
@@ -1000,7 +1045,7 @@ pub async fn get_ratings_by_restaurant_per_period(
     group_id: &str,
     restaurant_id: &str,
     year: i32,
-    period: Period,
+    period: &Period,
 ) -> Result<Vec<Rating>> {
     let date_range = period.to_date_range(year)?;
 
@@ -1782,10 +1827,22 @@ mod tests {
         assert!(ratings_by_restaurant_result.is_ok());
 
         let ratings_by_restaurant = ratings_by_restaurant_result?;
-        assert!(!ratings_by_restaurant.is_empty());
-        assert_eq!(ratings_by_restaurant.len(), 2);
+        let current_period_ratings = ratings_by_restaurant.current_period_ratings;
+        let historical_ratings = ratings_by_restaurant.historical_ratings;
 
-        for rating in ratings_by_restaurant {
+        let now = chrono::Utc::now();
+        let current_year = now.year();
+        let current_period = Period::from_date(now.date_naive());
+        assert_eq!(ratings_by_restaurant.current_year, current_year);
+        assert_eq!(ratings_by_restaurant.current_period, current_period);
+
+        assert!(!current_period_ratings.is_empty());
+        assert_eq!(current_period_ratings.len(), 2);
+
+        assert!(!historical_ratings.is_empty());
+        assert_eq!(historical_ratings.len(), 1);
+
+        for rating in current_period_ratings {
             assert_eq!(rating.restaurant_id, RESTAURANT_ID);
             assert_eq!(rating.group_id, GROUP_ID_1);
             assert!(rating.color.is_some());
@@ -1812,7 +1869,7 @@ mod tests {
             GROUP_ID_1,
             RESTAURANT_ID,
             current_year,
-            current_period.clone(),
+            &current_period,
         )
         .await;
         assert!(ratings_by_restaurant_result.is_ok());

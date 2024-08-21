@@ -8,23 +8,43 @@
     RESTAURANT_RATING_COMPLETE_ENDPOINT
   } from '$lib/endpoints';
   import Loading from '$lib/loading.svelte';
-  import type { NewRating, Rating } from '$lib/models.js';
+  import type {
+    AverageRatingPerPeriod,
+    NewRating,
+    Period,
+    Rating,
+    RatingsByPeriod
+  } from '$lib/models.js';
   import Chart from '$lib/chart.svelte';
   import { onMount } from 'svelte';
   import { readTokenCookie } from '$lib/auth.js';
+  import { TabGroup, Tab } from '@skeletonlabs/skeleton';
 
   export let data;
   export let id: string = data.restaurant.id;
+
   let isRatingComplete = false;
   let hasRated = false;
+
   let rating = 0;
   let rateLoading = false;
-  let restaurantRatings = Array<Rating>();
-  let datasetData = Array<number>();
-  let labels = Array<string>();
-  let backgroundColors = Array<string>();
-  let averageRating = 0;
+
+  let ratingsByPeriod: RatingsByPeriod;
+  let current_period_ratings = Array<Rating>();
+  let historical_ratings = Array<AverageRatingPerPeriod>();
+
+  let currentDatasetData = Array<number>();
+  let currentLabels = Array<string>();
+  let currentBackgroundColors = Array<string>();
+
+  let historicalDatasetData = Array<number>();
+  let historicalLabels = Array<string>();
+
+  let currentAverageRating = 0;
+  let historicalAverageRating = 0;
   let rateFailed = false;
+
+  let tabSet = 0;
 
   let checkingAuth = true;
   onMount(() => {
@@ -149,23 +169,39 @@
           }
         );
         // await new Promise((r) => setTimeout(r, 1000));
+
         const data = response.data;
-        // console.log('Get restaurant ratings response: ' + JSON.stringify(data));
         if (data.success && data.data) {
-          restaurantRatings = data.data;
-          // console.log('Restaurant ratings: ' + JSON.stringify(restaurantRatings));
-          averageRating = getAverageRating(restaurantRatings);
-          datasetData = [];
-          labels = [];
-          restaurantRatings.forEach((rating) => {
-            datasetData.push(rating.score);
-            labels.push(rating.username);
+          ratingsByPeriod = data.data;
+          current_period_ratings = ratingsByPeriod.current_period_ratings;
+          historical_ratings = ratingsByPeriod.historical_ratings;
+
+          currentAverageRating =
+            current_period_ratings.reduce((acc, cur) => acc + cur.score, 0) /
+            current_period_ratings.length;
+          currentDatasetData = [];
+          currentLabels = [];
+          current_period_ratings.forEach((rating) => {
+            currentDatasetData.push(rating.score);
+            currentLabels.push(rating.username);
             if (rating.color) {
-              backgroundColors.push(rating.color);
+              currentBackgroundColors.push(rating.color);
             }
           });
+
+          historicalAverageRating =
+            historical_ratings.reduce((acc, cur) => acc + cur.average_score, 0) /
+            historical_ratings.length;
+          historicalDatasetData = [];
+          historicalLabels = [];
+          historical_ratings.forEach((averate_rating_per_period) => {
+            historicalDatasetData.push(averate_rating_per_period.average_score);
+            historicalLabels.push(
+              getPeriodString(averate_rating_per_period.year, averate_rating_per_period.period)
+            );
+          });
         } else {
-          restaurantRatings = Array<Rating>();
+          current_period_ratings = Array<Rating>();
         }
       }
     } catch (error) {
@@ -173,8 +209,8 @@
     }
   }
 
-  function getAverageRating(restaurantRatings: Rating[]) {
-    return restaurantRatings.reduce((acc, cur) => acc + cur.score, 0) / restaurantRatings.length;
+  function getPeriodString(year: number, period: Period) {
+    return year + '-' + period;
   }
 </script>
 
@@ -229,8 +265,8 @@
       <!-- </div> -->
     {:then}
       {#if isRatingComplete}
-        <div class="flex items-center justify-center my-12">
-          <h2 class="text-center text-xl font-bold mb-4">Restaurant Ratings</h2>
+        <div class="flex items-center justify-center my-6">
+          <h2 class="text-center text-xl font-bold mb-0">Restaurant Ratings</h2>
         </div>
 
         {#await getRestaurantRatings()}
@@ -238,15 +274,55 @@
           <!--   <Loading /> -->
           <!-- </div> -->
         {:then}
-          {#if restaurantRatings.length > 0}
-            <div class="my-12 mx-auto max-w-7xl">
-              <Chart {labels} {datasetData} {backgroundColors} />
-            </div>
-            <div class="flex items-center justify-center my-12">
-              <h2 class="text-center text-lg font-bold mb-4">
-                Average Rating: {averageRating.toFixed(2)}
-              </h2>
-            </div>
+          {#if current_period_ratings.length > 0}
+            <TabGroup justify="justify-center">
+              <Tab bind:group={tabSet} name="tab1" value={0}>
+                <svelte:fragment slot="lead">⌛</svelte:fragment>
+                <span>Current</span>
+                <span
+                  >{getPeriodString(
+                    ratingsByPeriod.current_year,
+                    ratingsByPeriod.current_period
+                  )}</span
+                >
+              </Tab>
+              <Tab bind:group={tabSet} name="tab2" value={1}>
+                <svelte:fragment slot="lead">🗓</svelte:fragment>️
+                <span>Historical</span>
+              </Tab>
+              <!-- Tab Panels --->
+              <svelte:fragment slot="panel">
+                {#if tabSet === 0}
+                  <div class="flex items-center justify-center my-4">
+                    <h2 class="text-center text-lg font-bold">
+                      Current Average Rating: {currentAverageRating.toFixed(2)}
+                    </h2>
+                  </div>
+
+                  <div class="my-4 mx-auto max-w-7xl">
+                    <Chart
+                      labels={currentLabels}
+                      datasetData={currentDatasetData}
+                      backgroundColors={currentBackgroundColors}
+                    />
+                  </div>
+                {:else if tabSet === 1}
+                  <div class="flex items-center justify-center my-4">
+                    <h2 class="text-center text-lg font-bold">
+                      Historical Average Rating: {historicalAverageRating.toFixed(2)}
+                    </h2>
+                  </div>
+
+                  <div class="my-4 mx-auto max-w-7xl">
+                    <Chart
+                      chartType="line"
+                      labels={historicalLabels}
+                      datasetData={historicalDatasetData}
+                    />
+                  </div>
+                {/if}
+              </svelte:fragment>
+            </TabGroup>
           {/if}
         {/await}
       {/if}

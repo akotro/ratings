@@ -1,17 +1,21 @@
 <script lang="ts">
-  import { Bar } from 'svelte-chartjs';
+  import { Bar, Line } from 'svelte-chartjs';
   import {
     Chart,
     Title,
     Tooltip,
     Legend,
     BarElement,
+    LineElement,
+    PointElement,
     CategoryScale,
     LinearScale,
     Colors,
-    type ChartData
+    type ChartData,
+    Filler
   } from 'chart.js';
 
+  export let chartType: 'bar' | 'line' = 'bar';
   export let height = 350;
   export let borderWidth = 2;
   export let labels = ['Red', 'Blue', 'Yellow', 'Green', 'Purple', 'Orange'];
@@ -91,7 +95,7 @@
     borderColors = defaultBorderColors;
   }
 
-  let data: ChartData<'bar', (number | [number, number])[], unknown> = {
+  let data: ChartData<'bar' | 'line', (number | [number, number])[], unknown> = {
     labels: labels,
     datasets: [
       {
@@ -99,15 +103,34 @@
         borderWidth: borderWidth,
         data: datasetData,
         backgroundColor: backgroundColors,
-        borderColor: borderColors
+        borderColor: borderColors,
+        fill: chartType === 'line',
+        pointStyle: 'circle',
+        pointRadius: 8,
+        pointHoverRadius: 10
       }
     ]
   };
 
   let delayed = true;
+
+  let plugins;
+  let linePlugins = {
+    title: {
+      // display: true
+      // text: (ctx: { chart: { data: { datasets: { pointStyle: string }[] } } }) =>
+      //   'Point Style: ' + ctx.chart.data.datasets[0].pointStyle
+    },
+    Filler
+  };
+  if (chartType === 'line') {
+    plugins = linePlugins;
+  }
+
   let options = {
     responsive: true,
     maintainAspectRatio: false,
+    plugins: plugins,
     animation: {
       onComplete: () => {
         delayed = true;
@@ -128,7 +151,25 @@
     }
   };
 
-  Chart.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, Colors);
+  if (chartType === 'line') {
+    Chart.register(
+      Title,
+      Tooltip,
+      Legend,
+      LineElement,
+      PointElement,
+      CategoryScale,
+      LinearScale,
+      Colors,
+      Filler
+    );
+  } else {
+    Chart.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, Colors);
+  }
 </script>
 
-<Bar {data} {height} {options} />
+{#if chartType === 'bar'}
+  <Bar {data} {height} {options} />
+{:else if chartType === 'line'}
+  <Line {data} {height} {options} />
+{/if}
