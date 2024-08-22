@@ -274,7 +274,7 @@
           <!--   <Loading /> -->
           <!-- </div> -->
         {:then}
-          {#if current_period_ratings.length > 0}
+          {#if current_period_ratings.length > 0 || historical_ratings.length > 0}
             <TabGroup justify="justify-center">
               <Tab bind:group={tabSet} name="tab1" value={0}>
                 <svelte:fragment slot="lead">⌛</svelte:fragment>

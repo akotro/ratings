@@ -71,6 +71,7 @@ export interface RatingsByPeriod {
 }
 
 export interface AverageRatingPerPeriod {
+  restaurant_id: string;
   year: number;
   period: Period;
   average_score: number;

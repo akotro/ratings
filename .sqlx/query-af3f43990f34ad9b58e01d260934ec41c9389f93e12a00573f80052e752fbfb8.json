@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color\n         FROM ratings r\n         JOIN users u on u.id = r.user_id\n         WHERE user_id = ?",
+  "query": "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color\n         FROM ratings r\n         JOIN users u on u.id = r.user_id\n         WHERE r.user_id = ? AND r.created_at >= ? AND r.created_at <= ?",
   "describe": {
     "columns": [
       {
@@ -95,7 +95,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 3
     },
     "nullable": [
       false,
@@ -109,5 +109,5 @@
       false
     ]
   },
-  "hash": "e3d40f9235f1d7178130cf613ff9534b7d2380dec460a3b342a71cd47bd09852"
+  "hash": "af3f43990f34ad9b58e01d260934ec41c9389f93e12a00573f80052e752fbfb8"
 }

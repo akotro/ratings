@@ -525,6 +525,7 @@ async fn get_ratings_by_user_and_group_route(
     };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
+    // TODO: This should also get historical data so we can display a line chart
     let result = db_util::get_ratings_by_user_and_group(&mut conn, &user_id, group_id).await;
     match result {
         Ok(ratings) => HttpResponse::Ok().json(ApiResponse::success(ratings)),

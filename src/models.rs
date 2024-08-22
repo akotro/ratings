@@ -254,6 +254,7 @@ pub struct RatingsByPeriod {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AverageRatingPerPeriod {
+    pub restaurant_id: String,
     pub year: i32,
     pub period: Period,
     pub average_score: f64,

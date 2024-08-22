@@ -1,0 +1,58 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n             r.restaurant_id,\n             IFNULL(YEAR(r.created_at), 0) as year,\n             IFNULL(\n                 CASE\n                     WHEN MONTH(r.created_at) BETWEEN 1 AND 3 THEN 0\n                     WHEN MONTH(r.created_at) BETWEEN 4 AND 6 THEN 1\n                     WHEN MONTH(r.created_at) BETWEEN 7 AND 9 THEN 2\n                     ELSE 3\n                 END,\n                 0\n             ) as period,\n             IFNULL(AVG(r.score), 0) as average_score\n         FROM ratings r\n         WHERE r.user_id = ?\n         GROUP BY r.restaurant_id, year, period\n         ORDER BY year ASC, period ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "restaurant_id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "year",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 5
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "period",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 1
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "average_score",
+        "type_info": {
+          "type": "Double",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 16
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "a5dfdb83032dc5b67db14223bdc45756a0a49ccacc72ee79230ad65b87d8536d"
+}

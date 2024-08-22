@@ -98,9 +98,21 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
     }
 }
 pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
-    let db_users = sqlx::query_as!(DbUser, "SELECT id, username, password, color FROM users")
-        .fetch_all(pool)
-        .await?;
+    let mut conn = get_connection(pool)
+        .await
+        .ok_or(anyhow!("Failed to get connection."))?;
+    let mut tx = conn.begin().await?;
+
+    let db_users = match sqlx::query_as!(DbUser, "SELECT id, username, password, color FROM users")
+        .fetch_all(&mut *tx)
+        .await
+    {
+        Ok(db_users) => db_users,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
 
     let tasks: Vec<_> = db_users
         .into_iter()
@@ -110,13 +122,26 @@ pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
                 let mut conn = get_connection(&pool)
                     .await
                     .ok_or(anyhow!("Failed to get connection."))?;
-                // TODO: These should not be unwrap_or_default + add transaction
-                let ratings = get_ratings_by_user(&mut conn, &db_user.id)
-                    .await
-                    .unwrap_or_default();
-                let group_memberships = get_group_memberships_by_user(&mut conn, &db_user.id)
-                    .await
-                    .unwrap_or_default();
+                let mut tx = conn.begin().await?;
+
+                let ratings = match get_ratings_by_user(&mut tx, &db_user.id).await {
+                    Ok(ratings_by_period) => ratings_by_period.current_period_ratings,
+                    Err(err) => {
+                        tx.rollback().await?;
+                        return Err(anyhow::anyhow!(err));
+                    }
+                };
+                let group_memberships =
+                    match get_group_memberships_by_user(&mut tx, &db_user.id).await {
+                        Ok(group_memberships) => group_memberships,
+                        Err(err) => {
+                            tx.rollback().await?;
+                            return Err(anyhow::anyhow!(err));
+                        }
+                    };
+
+                tx.commit().await?;
+
                 Ok(User {
                     id: db_user.id,
                     token: String::new(),
@@ -131,6 +156,8 @@ pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
         .collect();
 
     let results: Result<Vec<User>> = futures::future::join_all(tasks).await.into_iter().collect();
+
+    tx.commit().await?;
 
     results
 }
@@ -157,7 +184,7 @@ pub async fn get_user_by_credentials(
     match db_user_result {
         Some(db_user) => {
             let ratings = match get_ratings_by_user(&mut tx, &db_user.id).await {
-                Ok(query_result) => query_result,
+                Ok(ratings_by_period) => ratings_by_period.current_period_ratings,
                 Err(err) => {
                     tx.rollback().await?;
                     return Err(anyhow!("User's ratings not found: {err}"));
@@ -928,47 +955,149 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
     }
 }
 
-pub async fn get_ratings_by_user(conn: &mut MySqlConnection, user_id: &str) -> Result<Vec<Rating>> {
-    let query = sqlx::query_as!(
+pub async fn get_ratings_by_user(
+    conn: &mut MySqlConnection,
+    user_id: &str,
+) -> Result<RatingsByPeriod> {
+    let mut tx = conn.begin().await?;
+
+    let now = chrono::Utc::now();
+    let current_year = now.year();
+    let current_period = Period::from_date(now.date_naive());
+    let date_range = current_period.to_date_range(current_year)?;
+
+    let current_period_query = sqlx::query_as!(
         DbRating,
         "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
-         WHERE user_id = ?",
+         WHERE r.user_id = ? AND r.created_at >= ? AND r.created_at <= ?",
+        user_id,
+        date_range.0,
+        date_range.1
+    );
+    let current_period_ratings = match current_period_query.fetch_all(&mut *tx).await {
+        Ok(current_period_ratings) => current_period_ratings,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
+    let current_period_ratings = current_period_ratings.iter().map(Rating::from_db).collect();
+
+    let historical_average_ratings_query = sqlx::query_as!(
+        AverageRatingPerPeriod,
+        "SELECT
+             r.restaurant_id,
+             IFNULL(YEAR(r.created_at), 0) as year,
+             IFNULL(
+                 CASE
+                     WHEN MONTH(r.created_at) BETWEEN 1 AND 3 THEN 0
+                     WHEN MONTH(r.created_at) BETWEEN 4 AND 6 THEN 1
+                     WHEN MONTH(r.created_at) BETWEEN 7 AND 9 THEN 2
+                     ELSE 3
+                 END,
+                 0
+             ) as period,
+             IFNULL(AVG(r.score), 0) as average_score
+         FROM ratings r
+         WHERE r.user_id = ?
+         GROUP BY r.restaurant_id, year, period
+         ORDER BY year ASC, period ASC",
         user_id,
     );
-    let ratings = query
-        .fetch_all(conn)
-        .await?
-        .iter()
-        .map(Rating::from_db)
-        .collect();
+    let historical_ratings = match historical_average_ratings_query.fetch_all(&mut *tx).await {
+        Ok(rows) => rows,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
 
-    Ok(ratings)
+    let ratings_by_period = RatingsByPeriod {
+        current_year,
+        current_period,
+        current_period_ratings,
+        historical_ratings,
+    };
+
+    tx.commit().await?;
+
+    Ok(ratings_by_period)
 }
 
 pub async fn get_ratings_by_user_and_group(
     conn: &mut MySqlConnection,
     user_id: &str,
     group_id: &str,
-) -> Result<Vec<Rating>> {
+) -> Result<RatingsByPeriod> {
+    let mut tx = conn.begin().await?;
+
+    let now = chrono::Utc::now();
+    let current_year = now.year();
+    let current_period = Period::from_date(now.date_naive());
+    let date_range = current_period.to_date_range(current_year)?;
+
     let query = sqlx::query_as!(
         DbRating,
         "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
-         WHERE user_id = ? and group_id = ?",
+         WHERE user_id = ? and group_id = ? AND created_at >= ? AND created_at <= ?",
         user_id,
-        group_id
+        group_id,
+        date_range.0,
+        date_range.1
     );
-    let ratings = query
-        .fetch_all(conn)
-        .await?
-        .iter()
-        .map(Rating::from_db)
-        .collect();
+    let current_period_ratings = match query.fetch_all(&mut *tx).await {
+        Ok(current_period_ratings) => current_period_ratings,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
+    let current_period_ratings = current_period_ratings.iter().map(Rating::from_db).collect();
 
-    Ok(ratings)
+    let historical_average_ratings_query = sqlx::query_as!(
+        AverageRatingPerPeriod,
+        "SELECT
+             r.restaurant_id,
+             IFNULL(YEAR(r.created_at), 0) as year,
+             IFNULL(
+                 CASE
+                     WHEN MONTH(r.created_at) BETWEEN 1 AND 3 THEN 0
+                     WHEN MONTH(r.created_at) BETWEEN 4 AND 6 THEN 1
+                     WHEN MONTH(r.created_at) BETWEEN 7 AND 9 THEN 2
+                     ELSE 3
+                 END,
+                 0
+             ) as period,
+             IFNULL(AVG(r.score), 0) as average_score
+         FROM ratings r
+         WHERE r.user_id = ? AND r.group_id = ?
+         GROUP BY r.restaurant_id, year, period
+         ORDER BY year ASC, period ASC;",
+        user_id,
+        group_id,
+    );
+    let historical_ratings = match historical_average_ratings_query.fetch_all(&mut *tx).await {
+        Ok(rows) => rows,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow::anyhow!(err));
+        }
+    };
+
+    let ratings_by_period = RatingsByPeriod {
+        current_year,
+        current_period,
+        current_period_ratings,
+        historical_ratings,
+    };
+
+    tx.commit().await?;
+
+    Ok(ratings_by_period)
 }
 
 pub async fn get_ratings_by_restaurant(
@@ -1001,6 +1130,7 @@ pub async fn get_ratings_by_restaurant(
     let historical_average_ratings_query = sqlx::query_as!(
         AverageRatingPerPeriod,
         "SELECT
+            r.restaurant_id,
             IFNULL(YEAR(r.created_at), 0) as year,
             IFNULL(
                 CASE
@@ -1019,7 +1149,6 @@ pub async fn get_ratings_by_restaurant(
         group_id,
         restaurant_id,
     );
-
     let historical_ratings = match historical_average_ratings_query.fetch_all(&mut *tx).await {
         Ok(rows) => rows,
         Err(err) => {
@@ -1802,10 +1931,22 @@ mod tests {
         assert!(ratings_by_user_result.is_ok());
 
         let ratings_by_user = ratings_by_user_result?;
-        assert!(!ratings_by_user.is_empty());
-        assert_eq!(ratings_by_user.len(), 1);
+        let current_period_ratings = ratings_by_user.current_period_ratings;
+        let historical_ratings = ratings_by_user.historical_ratings;
 
-        let rating = ratings_by_user.first().unwrap();
+        let now = chrono::Utc::now();
+        let current_year = now.year();
+        let current_period = Period::from_date(now.date_naive());
+        assert_eq!(ratings_by_user.current_year, current_year);
+        assert_eq!(ratings_by_user.current_period, current_period);
+
+        assert!(!current_period_ratings.is_empty());
+        assert_eq!(current_period_ratings.len(), 1);
+
+        assert!(!historical_ratings.is_empty());
+        assert_eq!(historical_ratings.len(), 1);
+
+        let rating = current_period_ratings.first().unwrap();
         assert_eq!(rating.user_id, USER_ID_1);
         assert_eq!(rating.group_id, GROUP_ID_1);
         assert_eq!(rating.color, Some(USER_COLOR_1.to_owned()));
