@@ -16,6 +16,7 @@
     ListBox,
     ListBoxItem
   } from '@skeletonlabs/skeleton';
+  import { goto } from '$app/navigation';
 
   let ratingsByPeriod: RatingsByPeriod;
   let current_ratings = Array<Rating>();
@@ -139,7 +140,10 @@
                   </thead>
                   <tbody>
                     {#each current_ratings as row}
-                      <tr>
+                      <tr
+                        on:click={() => goto(`/restaurants/rate/${row.restaurant_id}`)}
+                        class="cursor-pointer hover:bg-primary-100"
+                      >
                         <td>{row.restaurant_id}</td>
                         <td>{row.score}</td>
                       </tr>
