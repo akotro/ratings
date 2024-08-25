@@ -61,6 +61,12 @@
     target: 'userPopup',
     placement: 'bottom'
   };
+
+  const onRefresh = async () => {
+    // await new Promise((res) => setTimeout(res, 300));
+    // await invalidateAll();
+    location.reload();
+  };
 </script>
 
 <Drawer>
@@ -96,6 +102,9 @@
           </a>
         </div>
       </svelte:fragment>
+
+      <button class="btn btn-sm variant-ghost-surface mx-auto" on:click={onRefresh}> 🔃 </button>
+
       <svelte:fragment slot="trail">
         {#if $user && $user.token.length > 0}
           <p class="badge btn-sm bg-violet-500">{$user.groupMembership?.group.name || '___'}</p>
