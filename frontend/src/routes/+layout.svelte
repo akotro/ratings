@@ -21,52 +21,12 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import Navigation from '$lib/navigation.svelte';
-  import axios from 'axios';
-  import { PUSH_SUBSCRIBE_ENDPOINT, VAPID_PUBLIC_KEY } from '$lib/endpoints';
-  import type { NewPushSubscription, User } from '$lib/models';
+  import { NOTIFICATION_TOAST_DISMISSED, setupNotifications } from '$lib/notifications';
 
   storePopup.set({ computePosition, autoUpdate, offset, shift, flip, arrow });
   initializeStores();
 
   const toastStore = getToastStore();
-
-  async function setupNotifications(user: User, token: string) {
-    await navigator.serviceWorker
-      .getRegistration()
-      .then((registration) => {
-        if (registration) {
-          return registration.pushManager.getSubscription().then(async (subscription) => {
-            if (subscription) {
-              return subscription;
-            }
-
-            if (VAPID_PUBLIC_KEY) {
-              return registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: VAPID_PUBLIC_KEY
-              });
-            }
-          });
-        }
-      })
-      .then(async (subscription) => {
-        if (subscription) {
-          await axios.post(
-            PUSH_SUBSCRIBE_ENDPOINT,
-            {
-              user_id: user.id,
-              subscription_info: subscription
-            } as NewPushSubscription,
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: 'Bearer ' + token
-              }
-            }
-          );
-        }
-      });
-  }
 
   onMount(async () => {
     let token = readTokenCookie();
@@ -79,28 +39,37 @@
         if (status === 'granted') {
           await setupNotifications(userFromToken, token);
         } else {
-          const notificationsToast: ToastSettings = {
-            message: 'Consider allowing notifications.',
-            background: 'variant-filled-surface',
-            // timeout: 5000
-            autohide: false,
-            action: {
-              label: 'Allow',
-              response: async () => {
-                const status = await window.Notification.requestPermission();
-                if (status === 'granted') {
-                  await setupNotifications(userFromToken, token);
+          const notificationDismissed = localStorage.getItem(NOTIFICATION_TOAST_DISMISSED);
+
+          if (notificationDismissed === null || notificationDismissed === 'false') {
+            const notificationsToast: ToastSettings = {
+              message: 'Consider allowing notifications.',
+              background: 'variant-filled-surface',
+              // timeout: 6000,
+              autohide: false,
+              action: {
+                label: 'Allow',
+                response: async () => {
+                  const status = await window.Notification.requestPermission();
+                  if (status === 'granted') {
+                    await setupNotifications(userFromToken, token);
+                  }
+                }
+              },
+              callback(response) {
+                if (response.status === 'closed') {
+                  localStorage.setItem(NOTIFICATION_TOAST_DISMISSED, 'true');
                 }
               }
-            }
-          };
-          toastStore.trigger(notificationsToast);
+            };
+            toastStore.trigger(notificationsToast);
+          }
         }
       } else {
-        $user = null;
+        logout();
       }
     } else {
-      $user = null;
+      logout();
     }
   });
 

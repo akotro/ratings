@@ -1,9 +1,10 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/stores';
-  import { deleteCookies, readTokenCookie, setUserCookies } from '$lib/auth';
+  import { deleteCookies, readTokenCookie } from '$lib/auth';
   import { UPDATE_USER_ENDPOINT } from '$lib/endpoints';
   import Loading from '$lib/loading.svelte';
+  import { NOTIFICATION_TOAST_DISMISSED, setupNotifications } from '$lib/notifications';
   import { user } from '$lib/store';
   import axios from 'axios';
   import { onMount } from 'svelte';
@@ -16,6 +17,9 @@
   let updateFailed = false;
   let checkingAuth = true;
 
+  let notificationDismissed: string | null = null;
+  let showNotificationSettings = false;
+
   onMount(() => {
     const token = readTokenCookie();
     if (token) {
@@ -27,8 +31,16 @@
           hex = value.color;
         }
       });
+
+      notificationDismissed = localStorage.getItem(NOTIFICATION_TOAST_DISMISSED);
+      if (notificationDismissed === 'true' && window.Notification.permission !== 'granted') {
+        showNotificationSettings = true;
+      } else {
+        showNotificationSettings = false;
+      }
     } else {
       checkingAuth = false;
+      showNotificationSettings = false;
     }
   });
 
@@ -67,10 +79,7 @@
         );
         const data = response.data;
         if (data && data.success) {
-          // NOTE: logout?
           logout();
-          // $user = data.data;
-          // setUserCookies(data.data.token, data.data.color);
         } else {
           updateFailed = true;
         }
@@ -154,6 +163,31 @@
       {/if}
       {#if updateFailed}
         <p class="text-red-500">Operation failed. Please try again.</p>
+      {/if}
+
+      <br />
+
+      {#if showNotificationSettings}
+        <h2 class="text-center text-4xl my-4">Notification Settings</h2>
+
+        <div class="card p-2 w-full max-w-md">
+          <label class="label block text-center">
+            <!-- <span class="text-xl">Allow Notifications</span> -->
+            <div class="grid-cols-[auto_1fr_auto]">
+              <button
+                class="btn variant-filled-surface"
+                on:click={async () => {
+                  if ($user && $user.token.length > 0) {
+                    const status = await window.Notification.requestPermission();
+                    if (status === 'granted') {
+                      await setupNotifications($user, $user.token);
+                    }
+                  }
+                }}>Allow Notifications</button
+              >
+            </div>
+          </label>
+        </div>
       {/if}
     </div>
   {:else if $user == null || $user.token == null}

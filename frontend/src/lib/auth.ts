@@ -1,5 +1,6 @@
 import { jwtDecode } from 'jwt-decode';
 import type { GroupMembership, User } from './models';
+import { NOTIFICATION_TOAST_DISMISSED } from './notifications';
 
 export function setUserCookies(token: string, color: string) {
   setTokenCookie(token);
@@ -99,6 +100,7 @@ export function deleteCookies() {
   deleteTokenCookie();
   deleteColorCookie();
   deleteGroupCookie();
+  localStorage.setItem(NOTIFICATION_TOAST_DISMISSED, 'false');
 }
 
 export function getUserFromToken(token: string) {
