@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT AVG(score) FROM ratings WHERE group_id = ? and restaurant_id = ?",
+  "query": "SELECT AVG(score)\n             FROM ratings\n             WHERE group_id = ? and restaurant_id = ? AND created_at >= ? AND created_at <= ?",
   "describe": {
     "columns": [
       {
@@ -15,11 +15,11 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 4
     },
     "nullable": [
       true
     ]
   },
-  "hash": "31ce29a54dbed3d0244a4c1585c5f756cec3ea77e8a3f3708b1bb60b2ff6b8a2"
+  "hash": "20bb766787d9958e23b3e0143f71ea2504c99e34161c3cfb735d044fa0aa44bf"
 }

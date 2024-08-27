@@ -590,7 +590,8 @@ async fn get_rating_route(
     };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::get_rating(&mut conn, &user_id, group_id, &restaurant_id).await;
+    let result =
+        db_util::get_rating_by_restaurant(&mut conn, &user_id, group_id, &restaurant_id).await;
     match result {
         Ok(rating) => HttpResponse::Ok().json(ApiResponse::success(rating)),
         Err(error) => {

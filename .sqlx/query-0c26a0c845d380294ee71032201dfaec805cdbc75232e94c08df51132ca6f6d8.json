@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            (\n                SELECT COUNT(*)\n                FROM group_memberships\n                WHERE group_id = ?\n            ) = (\n                SELECT COUNT(*)\n                FROM ratings\n                WHERE group_id = ? AND restaurant_id = ? AND created_at >= ? AND created_at <= ?\n            ) AS is_complete;",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "is_complete",
+        "type_info": {
+          "type": "Long",
+          "flags": "BINARY",
+          "char_set": 63,
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "0c26a0c845d380294ee71032201dfaec805cdbc75232e94c08df51132ca6f6d8"
+}

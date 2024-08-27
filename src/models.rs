@@ -190,6 +190,19 @@ impl Period {
 
         Ok((start_date, end_date))
     }
+
+    pub fn current_period_info() -> anyhow::Result<(i32, Period, (NaiveDate, NaiveDate))> {
+        let now = chrono::Utc::now();
+        let current_year = now.year();
+        let current_period = Period::from_date(now.date_naive());
+        let date_range = current_period.to_date_range(current_year)?;
+
+        Ok((current_year, current_period, date_range))
+    }
+
+    pub fn current_period_date_range() -> anyhow::Result<(NaiveDate, NaiveDate)> {
+        Ok(Self::current_period_info()?.2)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

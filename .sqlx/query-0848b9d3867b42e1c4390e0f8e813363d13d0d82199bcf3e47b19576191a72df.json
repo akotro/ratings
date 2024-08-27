@@ -1,0 +1,69 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT *\n         FROM (\n            SELECT r.id, r.cuisine,\n                IF(\n                    (\n                        SELECT COUNT(*) FROM group_memberships gm\n                        WHERE gm.group_id = ?\n                    ) = (\n                        SELECT COUNT(*) FROM ratings ra2\n                        WHERE ra2.group_id = ? AND ra2.restaurant_id = r.id AND ra2.created_at >= ? AND ra2.created_at <= ?\n                    ),\n                    AVG(ra.score),\n                    NULL\n                ) AS avg_rating,\n                COUNT(ra.score) AS num_ratings,\n                (\n                    SELECT COUNT(*) FROM ratings ra3\n                    WHERE ra3.group_id = ? AND ra3.restaurant_id = r.id AND ra3.created_at >= ? AND ra3.created_at <= ?\n                ) AS has_any_rating\n             FROM restaurants r\n             LEFT JOIN ratings ra ON ra.group_id = ? AND ra.restaurant_id = r.id AND ra.created_at >= ? AND ra.created_at <= ?\n             GROUP BY r.id\n         ) AS subquery\n         ORDER BY\n            avg_rating IS NULL ASC,\n            has_any_rating DESC,\n            avg_rating DESC,\n            id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cuisine",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "char_set": 224,
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "avg_rating",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 16
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "num_ratings",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL",
+          "char_set": 63,
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "has_any_rating",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "char_set": 63,
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "0848b9d3867b42e1c4390e0f8e813363d13d0d82199bcf3e47b19576191a72df"
+}

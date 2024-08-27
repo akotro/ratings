@@ -3,7 +3,7 @@
 use std::{env, str::FromStr};
 
 use anyhow::{anyhow, Error, Result};
-use chrono::{Datelike, Utc};
+use chrono::Utc;
 use dotenvy::dotenv;
 use serde_json::json;
 use sqlx::{
@@ -888,6 +888,8 @@ pub async fn is_restaurant_rating_complete(
     let mut conn = get_connection(pool).await.unwrap();
     let mut tx = conn.begin().await?;
 
+    let date_range = Period::current_period_date_range()?;
+
     let result = match sqlx::query_scalar!(
         "SELECT
             (
@@ -897,11 +899,13 @@ pub async fn is_restaurant_rating_complete(
             ) = (
                 SELECT COUNT(*)
                 FROM ratings
-                WHERE group_id = ? AND restaurant_id = ?
+                WHERE group_id = ? AND restaurant_id = ? AND created_at >= ? AND created_at <= ?
             ) AS is_complete;",
         group_id,
         group_id,
-        restaurant_id
+        restaurant_id,
+        date_range.0,
+        date_range.1
     )
     .fetch_one(&mut *tx)
     .await
@@ -956,10 +960,16 @@ pub async fn get_avg_rating(
     if is_restaurant_rating_complete(pool, None, restaurant_id, group_id).await? {
         let mut conn = get_connection(pool).await.unwrap();
 
+        let date_range = Period::current_period_date_range()?;
+
         let avg_rating: Option<f64> = sqlx::query_scalar!(
-            "SELECT AVG(score) FROM ratings WHERE group_id = ? and restaurant_id = ?",
+            "SELECT AVG(score)
+             FROM ratings
+             WHERE group_id = ? and restaurant_id = ? AND created_at >= ? AND created_at <= ?",
             group_id,
-            restaurant_id
+            restaurant_id,
+            date_range.0,
+            date_range.1
         )
         .fetch_one(&mut *conn)
         .await?;
@@ -976,6 +986,8 @@ pub async fn get_restaurants_with_avg_rating(
 ) -> Result<Vec<(Restaurant, f64)>> {
     let mut tx = Acquire::begin(conn).await?;
 
+    let date_range = Period::current_period_date_range()?;
+
     let db_restaurants_with_avg_rating_result = sqlx::query!(
         "SELECT *
          FROM (
@@ -986,29 +998,35 @@ pub async fn get_restaurants_with_avg_rating(
                         WHERE gm.group_id = ?
                     ) = (
                         SELECT COUNT(*) FROM ratings ra2
-                        WHERE ra2.group_id = ? AND ra2.restaurant_id = r.id
+                        WHERE ra2.group_id = ? AND ra2.restaurant_id = r.id AND ra2.created_at >= ? AND ra2.created_at <= ?
                     ),
-                    AVG(ra.score), 
+                    AVG(ra.score),
                     NULL
                 ) AS avg_rating,
                 COUNT(ra.score) AS num_ratings,
                 (
                     SELECT COUNT(*) FROM ratings ra3
-                    WHERE ra3.group_id = ? AND ra3.restaurant_id = r.id
+                    WHERE ra3.group_id = ? AND ra3.restaurant_id = r.id AND ra3.created_at >= ? AND ra3.created_at <= ?
                 ) AS has_any_rating
              FROM restaurants r
-             LEFT JOIN ratings ra ON ra.group_id = ? AND ra.restaurant_id = r.id
+             LEFT JOIN ratings ra ON ra.group_id = ? AND ra.restaurant_id = r.id AND ra.created_at >= ? AND ra.created_at <= ?
              GROUP BY r.id
          ) AS subquery
-         ORDER BY 
+         ORDER BY
             avg_rating IS NULL ASC,
             has_any_rating DESC,
             avg_rating DESC,
             id",
         group_id,
         group_id,
+        date_range.0,
+        date_range.1,
         group_id,
-        group_id
+        date_range.0,
+        date_range.1,
+        group_id,
+        date_range.0,
+        date_range.1,
     )
     .fetch_all(&mut *tx)
     .await;
@@ -1198,10 +1216,7 @@ pub async fn get_ratings_by_user(
 ) -> Result<RatingsByPeriod> {
     let mut tx = conn.begin().await?;
 
-    let now = chrono::Utc::now();
-    let current_year = now.year();
-    let current_period = Period::from_date(now.date_naive());
-    let date_range = current_period.to_date_range(current_year)?;
+    let (current_year, current_period, date_range) = Period::current_period_info()?;
 
     let current_period_query = sqlx::query_as!(
         DbRating,
@@ -1270,10 +1285,7 @@ pub async fn get_ratings_by_user_and_group(
 ) -> Result<RatingsByPeriod> {
     let mut tx = conn.begin().await?;
 
-    let now = chrono::Utc::now();
-    let current_year = now.year();
-    let current_period = Period::from_date(now.date_naive());
-    let date_range = current_period.to_date_range(current_year)?;
+    let (current_year, current_period, date_range) = Period::current_period_info()?;
 
     let query = sqlx::query_as!(
         DbRating,
@@ -1344,9 +1356,7 @@ pub async fn get_ratings_by_restaurant(
 ) -> Result<RatingsByPeriod> {
     let mut tx = conn.begin().await?;
 
-    let now = chrono::Utc::now();
-    let current_year = now.year();
-    let current_period = Period::from_date(now.date_naive());
+    let (current_year, current_period, _) = Period::current_period_info()?;
 
     let current_period_ratings = match get_ratings_by_restaurant_per_period(
         &mut tx,
@@ -1436,21 +1446,25 @@ pub async fn get_ratings_by_restaurant_per_period(
     Ok(ratings)
 }
 
-pub async fn get_rating(
+pub async fn get_rating_by_restaurant(
     conn: &mut MySqlConnection,
     user_id: &str,
     group_id: &str,
     restaurant_id: &str,
 ) -> Result<Rating> {
+    let date_range = Period::current_period_date_range()?;
+
     let query = sqlx::query_as!(
         DbRating,
         "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
-         WHERE user_id = ? AND group_id = ? AND restaurant_id = ?",
+         WHERE user_id = ? AND group_id = ? AND restaurant_id = ? AND created_at >= ? AND created_at <= ?",
         user_id,
         group_id,
-        restaurant_id
+        restaurant_id,
+        date_range.0,
+        date_range.1
     );
     let rating = query.fetch_optional(conn).await?;
 
@@ -1488,23 +1502,26 @@ pub async fn update_rating(
 ) -> Result<Rating> {
     let mut tx = conn.begin().await?;
 
-    let updated_at = Utc::now().naive_utc();
-
     if !check_group_membership_exists(&mut tx, user_id, &rating.group_id).await? {
         tx.rollback().await?;
         return Err(anyhow!("User does not belong to group"));
     }
 
+    let date_range = Period::current_period_date_range()?;
+    let updated_at = Utc::now().naive_utc();
+
     let _ = match sqlx::query!(
         "UPDATE ratings
          SET score = ?, username = ?, updated_at = ?
-         WHERE group_id = ? AND user_id = ? AND restaurant_id = ?",
+         WHERE group_id = ? AND user_id = ? AND restaurant_id = ? AND created_at >= ? AND created_at <= ?",
         rating.score,
         rating.username,
         updated_at,
         rating.group_id,
         user_id,
-        rating.restaurant_id
+        rating.restaurant_id,
+        date_range.0,
+        date_range.1
     )
     .execute(&mut *tx)
     .await
@@ -1517,7 +1534,9 @@ pub async fn update_rating(
     };
 
     let updated_rating =
-        match get_rating(&mut tx, user_id, &rating.group_id, &rating.restaurant_id).await {
+        match get_rating_by_restaurant(&mut tx, user_id, &rating.group_id, &rating.restaurant_id)
+            .await
+        {
             Ok(updated_rating) => updated_rating,
             Err(err) => {
                 tx.rollback().await?;
@@ -2183,9 +2202,7 @@ mod tests {
             score: 8.0,
         };
 
-        let now = chrono::Utc::now();
-        let current_year = now.year();
-        let current_period = Period::from_date(now.date_naive());
+        let (current_year, current_period, _) = Period::current_period_info()?;
 
         let create_rating_result = create_rating(&mut conn, &new_rating).await;
         assert!(create_rating_result.is_ok());
@@ -2219,9 +2236,7 @@ mod tests {
         let current_period_ratings = ratings_by_user.current_period_ratings;
         let historical_ratings = ratings_by_user.historical_ratings;
 
-        let now = chrono::Utc::now();
-        let current_year = now.year();
-        let current_period = Period::from_date(now.date_naive());
+        let (current_year, current_period, _) = Period::current_period_info()?;
         assert_eq!(ratings_by_user.current_year, current_year);
         assert_eq!(ratings_by_user.current_period, current_period);
 
@@ -2256,9 +2271,7 @@ mod tests {
         let current_period_ratings = ratings_by_restaurant.current_period_ratings;
         let historical_ratings = ratings_by_restaurant.historical_ratings;
 
-        let now = chrono::Utc::now();
-        let current_year = now.year();
-        let current_period = Period::from_date(now.date_naive());
+        let (current_year, current_period, _) = Period::current_period_info()?;
         assert_eq!(ratings_by_restaurant.current_year, current_year);
         assert_eq!(ratings_by_restaurant.current_period, current_period);
 
@@ -2286,9 +2299,7 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
-        let now = chrono::Utc::now();
-        let current_year = now.year();
-        let current_period = Period::from_date(now.date_naive());
+        let (current_year, current_period, _) = Period::current_period_info()?;
 
         let ratings_by_restaurant_result = get_ratings_by_restaurant_per_period(
             &mut conn,
@@ -2324,7 +2335,8 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
-        let get_rating_result = get_rating(&mut conn, USER_ID_1, GROUP_ID_1, RESTAURANT_ID).await;
+        let get_rating_result =
+            get_rating_by_restaurant(&mut conn, USER_ID_1, GROUP_ID_1, RESTAURANT_ID).await;
         assert!(get_rating_result.is_ok());
 
         let rating = get_rating_result?;
@@ -2379,9 +2391,7 @@ mod tests {
             score: 9.0,
         };
 
-        let now = chrono::Utc::now();
-        let current_year = now.year();
-        let current_period = Period::from_date(now.date_naive());
+        let (current_year, current_period, _) = Period::current_period_info()?;
 
         let update_rating_result = update_rating(&mut conn, &new_rating, USER_ID_2).await;
         assert!(update_rating_result.is_ok());
