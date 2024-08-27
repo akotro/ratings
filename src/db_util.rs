@@ -1,10 +1,11 @@
 #![allow(dead_code)]
 
-use std::{env, result::Result::Ok, str::FromStr};
+use std::{env, str::FromStr};
 
 use anyhow::{anyhow, Error, Result};
 use chrono::{Datelike, Utc};
 use dotenvy::dotenv;
+use serde_json::json;
 use sqlx::{
     migrate,
     migrate::Migrator,
@@ -13,12 +14,18 @@ use sqlx::{
     Acquire, ConnectOptions, MySql, MySqlConnection, MySqlExecutor, MySqlPool, Row,
 };
 use uuid::Uuid;
+use web_push::{
+    IsahcWebPushClient, SubscriptionInfo, VapidSignatureBuilder, WebPushClient, WebPushError,
+    WebPushMessageBuilder,
+};
 
 use crate::{db_models::*, models::*};
 
 // NOTE: Database
 
 const DB_URL: &str = "DATABASE_URL";
+const PUBLIC_VAPID_PUBLIC_KEY: &str = "PUBLIC_VAPID_PUBLIC_KEY";
+const VAPID_PRIVATE_KEY: &str = "VAPID_PRIVATE_KEY";
 
 static MIGRATOR: Migrator = migrate!();
 
@@ -97,6 +104,7 @@ pub async fn create_user(conn: &mut MySqlConnection, new_user: &NewUser) -> Resu
         Err(anyhow::anyhow!("Failed to create user."))
     }
 }
+
 pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
     let mut conn = get_connection(pool)
         .await
@@ -276,6 +284,195 @@ pub async fn delete_user(conn: &mut MySqlConnection, user_id: &str) -> Result<My
     let result = sqlx::query!("DELETE FROM users WHERE id = ?", user_id)
         .execute(conn)
         .await?;
+
+    Ok(result)
+}
+
+// NOTE: Push Notifications
+
+pub fn init_push_notifications() -> Result<PushClient, Error> {
+    dotenv().ok();
+    let vapid_public_key =
+        env::var(PUBLIC_VAPID_PUBLIC_KEY).expect("PUBLIC_VAPID_PUBLIC_KEY must be set");
+    let vapid_private_key = env::var(VAPID_PRIVATE_KEY).expect("VAPID_PRIVATE_KEY must be set");
+
+    let client = IsahcWebPushClient::new()?;
+
+    Ok(PushClient {
+        vapid_public_key,
+        vapid_private_key,
+        client,
+    })
+}
+
+pub async fn create_push_subscription(
+    conn: &mut MySqlConnection,
+    user_id: &str,
+    subscription_info: &SubscriptionInfo,
+) -> Result<PushSubscription> {
+    let mut tx = conn.begin().await?;
+
+    let query = sqlx::query_as!(
+        PushSubscription,
+        "INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+         p256dh = VALUES(p256dh), auth = VALUES(auth)",
+        subscription_info.endpoint,
+        user_id,
+        subscription_info.keys.p256dh,
+        subscription_info.keys.auth,
+    );
+    let result = match query.execute(&mut *tx).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not create push subscription: {err}"));
+        }
+    };
+
+    if result.rows_affected() > 0 {
+        let push_subscription =
+            match get_push_subscription(&mut tx, &subscription_info.endpoint).await {
+                Ok(push_subscription) => push_subscription,
+                Err(err) => {
+                    tx.rollback().await?;
+                    return Err(anyhow!("Could not get push subscription: {err}"));
+                }
+            };
+
+        tx.commit().await?;
+
+        Ok(push_subscription)
+    } else {
+        Err(anyhow::anyhow!("Failed to create push subscription"))
+    }
+}
+
+pub async fn get_push_subscription(
+    conn: &mut MySqlConnection,
+    endpoint: &str,
+) -> Result<PushSubscription> {
+    let query = sqlx::query_as!(
+        PushSubscription,
+        "SELECT endpoint, user_id, p256dh, auth
+         FROM push_subscriptions
+         WHERE endpoint = ?",
+        endpoint,
+    );
+    let push_subscription = query.fetch_one(conn).await;
+
+    match push_subscription {
+        Ok(push_subscription) => Ok(push_subscription),
+        Err(err) => Err(anyhow!("Push subscription not found: {err}")),
+    }
+}
+
+pub async fn send_notification_to_group(
+    push_client: &PushClient,
+    pool: &MySqlPool,
+    group_id: &str,
+    message: &str,
+) -> Result<()> {
+    let push_subscriptions_query = sqlx::query!(
+        "SELECT DISTINCT ps.*, g.name as group_name
+         FROM group_memberships gm
+         JOIN groups g on g.id = gm.group_id
+         JOIN push_subscriptions ps ON ps.user_id = gm.user_id
+         WHERE gm.group_id = ?",
+        group_id,
+    );
+
+    let mut conn = get_connection(pool).await.unwrap();
+    let push_subscriptions = match push_subscriptions_query.fetch_all(&mut *conn).await {
+        Ok(result) => result,
+        Err(err) => return Err(anyhow!("Could not get push_subscriptions: {err}")),
+    };
+
+    let futures = push_subscriptions.into_iter().map(|push_subscription| {
+        let push_client = push_client.clone();
+        let subscription_info = SubscriptionInfo::new(
+            push_subscription.endpoint,
+            push_subscription.p256dh,
+            push_subscription.auth,
+        );
+        let body = format!("{}: {}", push_subscription.group_name, message);
+
+        let new_pool = pool.clone();
+        actix_web::rt::spawn(async move {
+            let mut conn = get_connection(&new_pool).await.unwrap();
+
+            if let Err(err) =
+                send_notification(&mut conn, &push_client, &subscription_info, &body).await
+            {
+                eprintln!(
+                    "ERROR: failed sending notification to {}: {err}",
+                    subscription_info.endpoint
+                );
+            }
+        })
+    });
+
+    futures::future::join_all(futures).await;
+
+    Ok(())
+}
+
+pub async fn send_notification(
+    conn: &mut MySqlConnection,
+    push_client: &PushClient,
+    subscription_info: &SubscriptionInfo,
+    body: &str,
+) -> Result<()> {
+    let vapid_builder = VapidSignatureBuilder::from_base64_no_sub(
+        &push_client.vapid_private_key,
+        web_push::URL_SAFE_NO_PAD,
+    )?;
+
+    let vapid_signature = vapid_builder
+        .clone()
+        .add_sub_info(subscription_info)
+        .build()?;
+
+    let mut push_builder = WebPushMessageBuilder::new(subscription_info);
+
+    push_builder.set_vapid_signature(vapid_signature.clone());
+
+    let payload = json!({
+        "body": body
+    })
+    .to_string();
+    push_builder.set_payload(web_push::ContentEncoding::Aes128Gcm, payload.as_bytes());
+
+    let response = push_client.client.send(push_builder.build()?).await;
+
+    match response {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            let should_remove = matches!(
+                err,
+                WebPushError::EndpointNotValid | WebPushError::EndpointNotFound
+            );
+
+            if should_remove {
+                delete_push_subscription(conn, &subscription_info.endpoint).await?;
+            }
+
+            Err(anyhow!("Error sending notification: {err}"))
+        }
+    }
+}
+
+pub async fn delete_push_subscription(
+    conn: &mut MySqlConnection,
+    endpoint: &str,
+) -> Result<MySqlQueryResult> {
+    let result = sqlx::query!(
+        "DELETE FROM push_subscriptions WHERE endpoint = ?",
+        endpoint
+    )
+    .execute(conn)
+    .await?;
 
     Ok(result)
 }
@@ -683,11 +880,15 @@ pub async fn delete_restaurant(
 }
 
 pub async fn is_restaurant_rating_complete(
-    conn: &mut MySqlConnection,
+    pool: &MySqlPool,
+    push_client: Option<&PushClient>,
     restaurant_id: &str,
     group_id: &str,
 ) -> Result<bool> {
-    let result = sqlx::query_scalar!(
+    let mut conn = get_connection(pool).await.unwrap();
+    let mut tx = conn.begin().await?;
+
+    let result = match sqlx::query_scalar!(
         "SELECT
             (
                 SELECT COUNT(*)
@@ -702,29 +903,65 @@ pub async fn is_restaurant_rating_complete(
         group_id,
         restaurant_id
     )
-    .fetch_one(conn)
-    .await?;
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(result) => result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!(
+                "Could not check if restaurant rating is complete: {err}"
+            ));
+        }
+    };
 
     let is_complete = match result {
         Some(is_complete) => is_complete == 1,
-        None => return Err(anyhow!("Failed to check if restaurant rating is complete.")),
+        None => {
+            tx.rollback().await?;
+            return Err(anyhow!("Failed to check if restaurant rating is complete."));
+        }
     };
+
+    tx.commit().await?;
+
+    if is_complete && push_client.is_some() {
+        let push_client = push_client.unwrap().clone();
+        let group_id = group_id.to_string();
+        let restaurant_id = restaurant_id.to_string();
+        let new_pool = pool.clone();
+
+        actix_web::rt::spawn(async move {
+            if let Err(err) = send_notification_to_group(
+                &push_client,
+                &new_pool,
+                &group_id,
+                &format!("{restaurant_id} ratings are complete!"),
+            )
+            .await
+            {
+                eprintln!("ERROR: Failed to send notification to group {group_id}: {err}");
+            }
+        });
+    }
 
     Ok(is_complete)
 }
 
 pub async fn get_avg_rating(
-    conn: &mut MySqlConnection,
+    pool: &MySqlPool,
     restaurant_id: &str,
     group_id: &str,
 ) -> Result<Option<f64>> {
-    if is_restaurant_rating_complete(conn, restaurant_id, group_id).await? {
+    if is_restaurant_rating_complete(pool, None, restaurant_id, group_id).await? {
+        let mut conn = get_connection(pool).await.unwrap();
+
         let avg_rating: Option<f64> = sqlx::query_scalar!(
             "SELECT AVG(score) FROM ratings WHERE group_id = ? and restaurant_id = ?",
             group_id,
             restaurant_id
         )
-        .fetch_one(conn)
+        .fetch_one(&mut *conn)
         .await?;
 
         Ok(avg_rating)
@@ -1524,6 +1761,59 @@ mod tests {
     }
 
     #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_create_push_subscription(pool: MySqlPool) -> Result<()> {
+        let subscription_info =
+            SubscriptionInfo::new("https://test_endpoint.com", "p256dh", "auth");
+
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+        let push_subscription_result =
+            create_push_subscription(&mut conn, USER_ID_1, &subscription_info).await;
+        assert!(push_subscription_result.is_ok());
+
+        let initial_push_subscription = push_subscription_result?;
+        assert_eq!(initial_push_subscription.user_id, USER_ID_1);
+        assert_eq!(
+            initial_push_subscription.endpoint,
+            subscription_info.endpoint
+        );
+        assert_eq!(
+            initial_push_subscription.p256dh,
+            subscription_info.keys.p256dh
+        );
+        assert_eq!(initial_push_subscription.auth, subscription_info.keys.auth);
+
+        let updated_subscription_info =
+            SubscriptionInfo::new("https://test_endpoint.com", "p256dh1", "auth1");
+
+        let push_subscription_result =
+            create_push_subscription(&mut conn, USER_ID_1, &updated_subscription_info).await;
+        assert!(push_subscription_result.is_ok());
+
+        let updated_push_subscription = push_subscription_result?;
+        assert_eq!(
+            updated_push_subscription.endpoint,
+            initial_push_subscription.endpoint
+        );
+        assert_eq!(
+            updated_push_subscription.endpoint,
+            updated_subscription_info.endpoint
+        );
+        assert_eq!(updated_push_subscription.user_id, USER_ID_1);
+        assert_eq!(
+            updated_push_subscription.p256dh,
+            updated_subscription_info.keys.p256dh
+        );
+        assert_eq!(
+            updated_push_subscription.auth,
+            updated_subscription_info.keys.auth
+        );
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
     async fn test_create_group(pool: MySqlPool) -> Result<()> {
         let new_group = NewGroup {
             name: "test_group3".to_owned(),
@@ -1802,12 +2092,8 @@ mod tests {
         scripts("users", "restaurants", "ratings_incomplete")
     ))]
     async fn test_is_restaurant_rating_complete(pool: MySqlPool) -> Result<()> {
-        let mut conn = get_connection(&pool)
-            .await
-            .ok_or(anyhow!("Failed to get connection."))?;
-
         let mut is_restaurant_rating_complete_result =
-            is_restaurant_rating_complete(&mut conn, RESTAURANT_ID, GROUP_ID_1).await;
+            is_restaurant_rating_complete(&pool, None, RESTAURANT_ID, GROUP_ID_1).await;
         assert!(is_restaurant_rating_complete_result.is_ok());
 
         let mut is_complete = is_restaurant_rating_complete_result?;
@@ -1821,11 +2107,14 @@ mod tests {
             score: 8.0,
         };
 
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
         let create_rating_result = create_rating(&mut conn, &new_rating).await;
         assert!(create_rating_result.is_ok());
 
         is_restaurant_rating_complete_result =
-            is_restaurant_rating_complete(&mut conn, RESTAURANT_ID, GROUP_ID_1).await;
+            is_restaurant_rating_complete(&pool, None, RESTAURANT_ID, GROUP_ID_1).await;
         assert!(is_restaurant_rating_complete_result.is_ok());
 
         is_complete = is_restaurant_rating_complete_result?;
@@ -1839,11 +2128,7 @@ mod tests {
         scripts("users", "restaurants", "ratings_complete")
     ))]
     async fn test_get_avg_rating(pool: MySqlPool) -> Result<()> {
-        let mut conn = get_connection(&pool)
-            .await
-            .ok_or(anyhow!("Failed to get connection."))?;
-
-        let avg_rating_result = get_avg_rating(&mut conn, RESTAURANT_ID, GROUP_ID_1).await;
+        let avg_rating_result = get_avg_rating(&pool, RESTAURANT_ID, GROUP_ID_1).await;
         assert!(avg_rating_result.is_ok());
 
         let avg_rating_option = avg_rating_result?;

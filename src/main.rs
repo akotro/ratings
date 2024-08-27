@@ -28,6 +28,7 @@ async fn main() -> anyhow::Result<()> {
     let secret_key = Data::new(env::var(auth::JWT_SECRET).expect("JWT_SECRET must be set"));
 
     let db_pool = db_util::init_database().await?;
+    let push_client = db_util::init_push_notifications()?;
 
     let governor_conf = configure_governor();
 
@@ -47,6 +48,7 @@ async fn main() -> anyhow::Result<()> {
             .service(
                 web::scope("ratings")
                     .app_data(Data::new(db_pool.clone()))
+                    .app_data(Data::new(push_client.clone()))
                     .app_data(Data::new(ip_blacklist.clone()))
                     .app_data(secret_key.clone())
                     .app_data(web::JsonConfig::default().error_handler(json_error_handler))
@@ -73,6 +75,7 @@ async fn main() -> anyhow::Result<()> {
                             .service(register_user_route)
                             .service(login_user_route),
                     )
+                    .service(web::scope("push").service(push_subscribe_route))
                     .default_service(web::route().to(HttpResponse::NotFound)),
             )
     });

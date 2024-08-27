@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO push_subscriptions (endpoint, user_id, p256dh, auth)\n         VALUES (?, ?, ?, ?)\n         ON DUPLICATE KEY UPDATE\n         p256dh = VALUES(p256dh), auth = VALUES(auth)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "9088e220c073abff61938616e2b7b5c84890f0c285d06dc8b699ef9dfa1fb8c6"
+}

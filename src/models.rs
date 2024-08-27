@@ -2,6 +2,7 @@
 
 use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
+use web_push::{IsahcWebPushClient, SubscriptionInfo};
 
 use crate::db_models::{DbGroupMembership, DbRating};
 
@@ -21,6 +22,27 @@ pub struct UserClaims {
     pub id: String,
     pub username: String,
     pub exp: usize,
+}
+
+#[derive(Default, Clone)]
+pub struct PushClient {
+    pub vapid_public_key: String,
+    pub vapid_private_key: String,
+    pub client: IsahcWebPushClient,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct NewPushSubscription {
+    pub user_id: String,
+    pub subscription_info: SubscriptionInfo,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushSubscription {
+    pub endpoint: String,
+    pub user_id: String,
+    pub p256dh: String,
+    pub auth: String,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize, sqlx::Type)]

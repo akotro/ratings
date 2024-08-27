@@ -11,7 +11,9 @@
     storePopup,
     type PopupSettings,
     popup,
-    Toast
+    Toast,
+    getToastStore,
+    type ToastSettings
   } from '@skeletonlabs/skeleton';
   import { computePosition, autoUpdate, offset, shift, flip, arrow } from '@floating-ui/dom';
   import { user } from '$lib/store';
@@ -19,22 +21,85 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import Navigation from '$lib/navigation.svelte';
+  import axios from 'axios';
+  import { PUSH_SUBSCRIBE_ENDPOINT, VAPID_PUBLIC_KEY } from '$lib/endpoints';
+  import type { NewPushSubscription, User } from '$lib/models';
 
   storePopup.set({ computePosition, autoUpdate, offset, shift, flip, arrow });
   initializeStores();
 
-  onMount(() => {
+  const toastStore = getToastStore();
+
+  async function setupNotifications(user: User, token: string) {
+    await navigator.serviceWorker
+      .getRegistration()
+      .then((registration) => {
+        if (registration) {
+          return registration.pushManager.getSubscription().then(async (subscription) => {
+            if (subscription) {
+              return subscription;
+            }
+
+            if (VAPID_PUBLIC_KEY) {
+              return registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: VAPID_PUBLIC_KEY
+              });
+            }
+          });
+        }
+      })
+      .then(async (subscription) => {
+        if (subscription) {
+          await axios.post(
+            PUSH_SUBSCRIBE_ENDPOINT,
+            {
+              user_id: user.id,
+              subscription_info: subscription
+            } as NewPushSubscription,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: 'Bearer ' + token
+              }
+            }
+          );
+        }
+      });
+  }
+
+  onMount(async () => {
     let token = readTokenCookie();
     if (token) {
       const userFromToken = getUserFromToken(token);
       if (userFromToken) {
         $user = userFromToken;
+
+        const status = await Notification.requestPermission();
+        if (status === 'granted') {
+          await setupNotifications(userFromToken, token);
+        } else {
+          const notificationsToast: ToastSettings = {
+            message: 'Consider allowing notifications.',
+            background: 'variant-filled-surface',
+            // timeout: 5000
+            autohide: false,
+            action: {
+              label: 'Allow',
+              response: async () => {
+                const status = await window.Notification.requestPermission();
+                if (status === 'granted') {
+                  await setupNotifications(userFromToken, token);
+                }
+              }
+            }
+          };
+          toastStore.trigger(notificationsToast);
+        }
       } else {
-        // Token is invalid or expired, handle accordingly (e.g., clear user)
         $user = null;
       }
     } else {
-      // No token found, user is not logged in
       $user = null;
     }
   });

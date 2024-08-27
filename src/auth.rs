@@ -109,7 +109,7 @@ type IpBlacklist = Arc<Mutex<Vec<String>>>;
 
 pub async fn update_blacklist(db_pool: MySqlPool, blacklist: IpBlacklist) {
     loop {
-        println!("[{}]: Updating IP blacklist...", chrono::Utc::now());
+        println!("INFO:[{}]: Updating IP blacklist...", chrono::Utc::now());
 
         let updated_blacklist = get_ip_blacklist(db_pool.clone()).await.unwrap_or_default();
         *blacklist.lock().unwrap() = updated_blacklist;
@@ -132,7 +132,7 @@ pub fn validate_ip(req: &HttpRequest) -> Result<(), HttpResponse> {
     let ip_blacklist = ip_blacklist.lock().unwrap();
 
     if ip_blacklist.contains(&ip.to_string()) {
-        println!("Blocked ip: {ip}");
+        println!("INFO: Blocked ip: {ip}");
         return Err(HttpResponse::Unauthorized().finish());
     }
 

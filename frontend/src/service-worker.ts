@@ -61,3 +61,42 @@ worker.addEventListener('fetch', (event: any) => {
     );
   }
 });
+
+// Listen for push events
+worker.addEventListener('push', (event: any) => {
+  // console.log('received push event');
+  const data = event.data ? event.data.json() : {};
+  const title = data.title || 'Ratings';
+  const options = {
+    body: data.body || 'Default body content',
+    icon: data.icon || '/apple-icon-144x144.png',
+    badge: data.badge || '/apple-icon-144x144.png',
+    data: {
+      url: data.url || '/',
+      ...data
+    }
+  };
+
+  // console.log('body: ' + options.body);
+  event.waitUntil(worker.registration.showNotification(title, options));
+});
+
+// Listen for notificationclick events
+worker.addEventListener('notificationclick', (event: any) => {
+  event.notification.close();
+
+  event.waitUntil(
+    worker.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList: any) => {
+        const client = clientList.find(
+          (c: any) => c.url === event.notification.data.url && 'focus' in c
+        );
+        if (client) {
+          return client.focus();
+        } else if (worker.clients.openWindow) {
+          return worker.clients.openWindow(event.notification.data.url);
+        }
+      })
+  );
+});

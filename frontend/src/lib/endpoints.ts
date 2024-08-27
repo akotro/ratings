@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/public';
 
 export const API_BASE_URL = env.PUBLIC_API_BASE_URL;
+export const VAPID_PUBLIC_KEY = env.PUBLIC_VAPID_PUBLIC_KEY;
 
 export const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
 export const REGISTER_ENDPOINT = `${API_BASE_URL}/auth/register`;
@@ -38,3 +39,5 @@ export function GET_RATINGS_ENDPOINT(userId: string, groupId: string) {
 export function RATE_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/users/${userId}/ratings`;
 }
+
+export const PUSH_SUBSCRIBE_ENDPOINT = `${API_BASE_URL}/push/subscribe`;

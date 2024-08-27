@@ -156,6 +156,36 @@ async fn delete_user_route(
     }
 }
 
+#[post("/subscribe")]
+async fn push_subscribe_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    new_push_subscription: web::Json<NewPushSubscription>,
+) -> HttpResponse {
+    if let Err(err) = auth::validate_ip(&req) {
+        return err;
+    }
+
+    if let Err(err) = auth::validate_token(&req) {
+        return err;
+    }
+
+    let mut conn = db_util::get_connection(&pool).await.unwrap();
+    let result = db_util::create_push_subscription(
+        &mut conn,
+        &new_push_subscription.user_id,
+        &new_push_subscription.subscription_info,
+    )
+    .await;
+    match result {
+        // TODO: Should we actually return this to the client?
+        Ok(push_subscription) => HttpResponse::Ok().json(ApiResponse::success(push_subscription)),
+        Err(error) => {
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
+        }
+    }
+}
+
 #[get("/groups/{user_id}")]
 async fn get_group_memberships_by_user_route(
     pool: web::Data<MySqlPool>,
@@ -382,6 +412,7 @@ async fn get_restaurant_ratings_per_period_route(
 #[get("/restaurants/{id}/is_rating_complete")]
 async fn is_restaurant_rating_complete_route(
     pool: web::Data<MySqlPool>,
+    push_client: web::Data<PushClient>,
     req: HttpRequest,
     id: web::Path<String>,
     query_params: web::Query<HashMap<String, String>>,
@@ -403,8 +434,8 @@ async fn is_restaurant_rating_complete_route(
         }
     };
 
-    let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::is_restaurant_rating_complete(&mut conn, &id, group_id).await;
+    let result =
+        db_util::is_restaurant_rating_complete(&pool, Some(&push_client), &id, group_id).await;
     match result {
         Ok(is_rating_complete) => HttpResponse::Ok().json(ApiResponse::success(is_rating_complete)),
         Err(error) => {
@@ -490,7 +521,6 @@ async fn get_ratings_route(
     }
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    // TODO: This should also get historical data so we can display a line chart
     let result = db_util::get_ratings_by_user(&mut conn, &user_id).await;
     match result {
         Ok(ratings) => HttpResponse::Ok().json(ApiResponse::success(ratings)),
@@ -525,7 +555,6 @@ async fn get_ratings_by_user_and_group_route(
     };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    // TODO: This should also get historical data so we can display a line chart
     let result = db_util::get_ratings_by_user_and_group(&mut conn, &user_id, group_id).await;
     match result {
         Ok(ratings) => HttpResponse::Ok().json(ApiResponse::success(ratings)),

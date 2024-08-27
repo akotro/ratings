@@ -7,6 +7,18 @@ export interface User {
   groupMembership: GroupMembership | null;
 }
 
+export interface NewPushSubscription {
+  user_id: string;
+  subscription_info: PushSubscription;
+}
+
+export interface UserPushSubscription {
+  endpoint: string;
+  user_id: string;
+  p256dh: string;
+  auth: string;
+}
+
 export enum Role {
   Admin = 'Admin',
   Member = 'Member'
