@@ -360,12 +360,123 @@ pub async fn get_push_subscription(
          WHERE endpoint = ?",
         endpoint,
     );
-    let push_subscription = query.fetch_one(conn).await;
+    let push_subscription_result = query.fetch_one(conn).await;
 
-    match push_subscription {
+    match push_subscription_result {
         Ok(push_subscription) => Ok(push_subscription),
         Err(err) => Err(anyhow!("Push subscription not found: {err}")),
     }
+}
+
+pub async fn delete_push_subscription(
+    conn: &mut MySqlConnection,
+    endpoint: &str,
+) -> Result<MySqlQueryResult> {
+    let result = sqlx::query!(
+        "DELETE FROM push_subscriptions WHERE endpoint = ?",
+        endpoint
+    )
+    .execute(conn)
+    .await?;
+
+    Ok(result)
+}
+
+pub async fn create_rating_notification(
+    conn: &mut MySqlConnection,
+    restaurant_id: &str,
+    group_id: &str,
+) -> Result<RatingNotification> {
+    let mut tx = conn.begin().await?;
+
+    let query = sqlx::query_as!(
+        RatingNotification,
+        "INSERT INTO rating_notifications (restaurant_id, group_id)
+         VALUES(?, ?)",
+        restaurant_id,
+        group_id,
+    );
+    let result = match query.execute(&mut *tx).await {
+        Ok(query_result) => query_result,
+        Err(err) => {
+            tx.rollback().await?;
+            return Err(anyhow!("Could not create rating notification: {err}"));
+        }
+    };
+
+    if result.rows_affected() > 0 {
+        let last_insert_id = result.last_insert_id();
+
+        let rating_notification =
+            match get_rating_notification_by_id(&mut tx, &(last_insert_id as i32)).await {
+                Ok(rating_notification) => rating_notification,
+                Err(err) => {
+                    tx.rollback().await?;
+                    return Err(anyhow!("Could not get push subscription: {err}"));
+                }
+            };
+
+        tx.commit().await?;
+
+        Ok(rating_notification)
+    } else {
+        Err(anyhow::anyhow!("Failed to create rating notification"))
+    }
+}
+
+pub async fn get_rating_notification_by_id(
+    conn: &mut MySqlConnection,
+    id: &i32,
+) -> Result<RatingNotification> {
+    let query = sqlx::query_as!(
+        RatingNotification,
+        "SELECT id, restaurant_id, group_id, notified_at
+         FROM rating_notifications
+         WHERE id = ?",
+        id
+    );
+    let rating_notification_result = query.fetch_one(conn).await;
+
+    match rating_notification_result {
+        Ok(rating_notification) => Ok(rating_notification),
+        Err(err) => Err(anyhow!("Rating notification not found: {err}")),
+    }
+}
+
+pub async fn rating_notification_sent(
+    conn: &mut MySqlConnection,
+    restaurant_id: &str,
+    group_id: &str,
+) -> Result<bool> {
+    let date_range = Period::current_period_date_range()?;
+
+    let rating_notification_exists = match sqlx::query_scalar!(
+        "SELECT EXISTS (
+            SELECT 1
+            FROM rating_notifications
+            WHERE restaurant_id = ? AND group_id = ? AND notified_at >= ? AND notified_at <= ?
+         ) as rating_notification_exists",
+        restaurant_id,
+        group_id,
+        date_range.0,
+        date_range.1
+    )
+    .fetch_one(conn)
+    .await
+    {
+        Ok(exists_result) => exists_result,
+        Err(err) => {
+            return Err(anyhow!(
+                "Could not check if rating notification has been sent: {err}"
+            ));
+        }
+    };
+
+    if rating_notification_exists == 1 {
+        return Ok(true);
+    }
+
+    Ok(false)
 }
 
 pub async fn send_notification_to_group(
@@ -461,20 +572,6 @@ pub async fn send_notification(
             Err(anyhow!("Error sending notification: {err}"))
         }
     }
-}
-
-pub async fn delete_push_subscription(
-    conn: &mut MySqlConnection,
-    endpoint: &str,
-) -> Result<MySqlQueryResult> {
-    let result = sqlx::query!(
-        "DELETE FROM push_subscriptions WHERE endpoint = ?",
-        endpoint
-    )
-    .execute(conn)
-    .await?;
-
-    Ok(result)
 }
 
 // NOTE: Groups
@@ -653,11 +750,10 @@ pub async fn check_group_membership_exists(
     group_id: &str,
 ) -> Result<bool> {
     let group_membership_exists_query = sqlx::query_scalar!(
-        "select exists (
-            select 1
-            from group_memberships
-            where user_id = ?
-                and group_id = ?
+        "SELECT EXISTS (
+            SELECT 1
+            FROM group_memberships
+            WHERE user_id = ? AND group_id = ?
          ) as group_membership_exists;",
         user_id,
         group_id
@@ -927,26 +1023,46 @@ pub async fn is_restaurant_rating_complete(
         }
     };
 
-    tx.commit().await?;
-
     if is_complete && push_client.is_some() {
-        let push_client = push_client.unwrap().clone();
-        let group_id = group_id.to_string();
-        let restaurant_id = restaurant_id.to_string();
-        let new_pool = pool.clone();
+        let notification_sent =
+            match rating_notification_sent(&mut tx, restaurant_id, group_id).await {
+                Ok(notification_sent) => notification_sent,
+                Err(err) => {
+                    tx.rollback().await?;
+                    return Err(err);
+                }
+            };
 
-        actix_web::rt::spawn(async move {
-            if let Err(err) = send_notification_to_group(
-                &push_client,
-                &new_pool,
-                &group_id,
-                &format!("{restaurant_id} ratings are complete!"),
-            )
-            .await
-            {
-                eprintln!("ERROR: Failed to send notification to group {group_id}: {err}");
+        if !notification_sent {
+            if let Err(err) = create_rating_notification(&mut tx, restaurant_id, group_id).await {
+                tx.rollback().await?;
+                return Err(err);
             }
-        });
+
+            tx.commit().await?;
+
+            let push_client = push_client.unwrap().clone();
+            let group_id = group_id.to_string();
+            let restaurant_id = restaurant_id.to_string();
+            let new_pool = pool.clone();
+
+            actix_web::rt::spawn(async move {
+                if let Err(err) = send_notification_to_group(
+                    &push_client,
+                    &new_pool,
+                    &group_id,
+                    &format!("{restaurant_id} ratings are complete!"),
+                )
+                .await
+                {
+                    eprintln!("ERROR: Failed to send notification to group {group_id} for restaurant {restaurant_id}: {err}");
+                }
+            });
+        } else {
+            tx.commit().await?;
+        }
+    } else {
+        tx.commit().await?;
     }
 
     Ok(is_complete)
@@ -1827,6 +1943,28 @@ mod tests {
         assert_eq!(
             updated_push_subscription.auth,
             updated_subscription_info.keys.auth
+        );
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users", "restaurants")))]
+    async fn test_create_rating_notification(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+        let create_rating_notification_result =
+            create_rating_notification(&mut conn, RESTAURANT_ID, GROUP_ID_1).await;
+        assert!(create_rating_notification_result.is_ok());
+
+        let rating_notification = create_rating_notification_result?;
+        assert_eq!(rating_notification.restaurant_id, RESTAURANT_ID);
+        assert_eq!(rating_notification.group_id, GROUP_ID_1);
+
+        let current_period = Period::current_period()?;
+        assert_eq!(
+            Period::from_date(rating_notification.notified_at.into()),
+            current_period
         );
 
         Ok(())

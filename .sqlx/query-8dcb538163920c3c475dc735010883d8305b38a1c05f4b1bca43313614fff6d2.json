@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO rating_notifications (restaurant_id, group_id)\n         VALUES(?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "8dcb538163920c3c475dc735010883d8305b38a1c05f4b1bca43313614fff6d2"
+}

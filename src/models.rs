@@ -38,6 +38,14 @@ pub struct NewPushSubscription {
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RatingNotification {
+    pub id: i32,
+    pub group_id: String,
+    pub restaurant_id: String,
+    pub notified_at: NaiveDateTime,
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PushSubscription {
     pub endpoint: String,
     pub user_id: String,
@@ -198,6 +206,10 @@ impl Period {
         let date_range = current_period.to_date_range(current_year)?;
 
         Ok((current_year, current_period, date_range))
+    }
+
+    pub fn current_period() -> anyhow::Result<Period> {
+        Ok(Self::current_period_info()?.1)
     }
 
     pub fn current_period_date_range() -> anyhow::Result<(NaiveDate, NaiveDate)> {

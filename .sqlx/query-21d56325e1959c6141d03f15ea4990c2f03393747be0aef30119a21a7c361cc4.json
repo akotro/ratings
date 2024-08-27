@@ -1,0 +1,25 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT EXISTS (\n            SELECT 1\n            FROM rating_notifications\n            WHERE restaurant_id = ? AND group_id = ? AND notified_at >= ? AND notified_at <= ?\n         ) as rating_notification_exists",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rating_notification_exists",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "char_set": 63,
+          "max_size": 1
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "21d56325e1959c6141d03f15ea4990c2f03393747be0aef30119a21a7c361cc4"
+}
