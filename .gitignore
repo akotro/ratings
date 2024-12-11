@@ -5,5 +5,4 @@ result*
 
 ### direnv ###
 .direnv
-.envrc
 .env
