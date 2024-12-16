@@ -52,9 +52,8 @@ jobs:
       uses: DeterminateSystems/nix-installer-action@main
       with:
         extra-conf: |
-          substituters = https://cache.nixos.org/
-          extra-substituters = https://nix-community.cachix.org https://aseipp-nix-cache.global.ssl.fastly.net https://nixcache.reflex-frp.org https://cache.iog.io https://digitallyinduced.cachix.org https://ghc-nix.cachix.org https://ic-hs-test.cachix.org https://kaleidogen.cachix.org https://static-haskell-nix.cachix.org https://tttool.cachix.org
-          extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+          substituters = https://cache.nixos.org/ https://nix-community.cachix.org https://hyprland.cachix.org https://nixcache.tithe.stream
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc= nixcache.tithe.stream:NaU/9+NHx87UVq6ypmKp2++ny/uSlQvl/7n86FY0s00=
     - uses: DeterminateSystems/magic-nix-cache-action@main
 
     - name: Checkout external repository
@@ -77,7 +76,7 @@ jobs:
     - name: Build and deploy
       run: |
         set -euxo pipefail
-        nix run github:serokell/deploy-rs -- --skip-checks --remote-build .#$HOSTNAME.system -- --accept-flake-config
+        nix run github:serokell/deploy-rs -- --skip-checks .#$HOSTNAME.system -- --accept-flake-config
 
     - name: Commit and push changes
       if: success()
