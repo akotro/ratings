@@ -15,4 +15,4 @@
 
 ## License
 
-`Ratings` is licensed under the MIT License. See [LICENSE](LICENSE) for more information.
+`Ratings` is licensed under the GNU GPLv3 license. See [LICENSE](LICENSE) for more information.
