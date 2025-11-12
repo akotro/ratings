@@ -43,8 +43,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Build
-        run: nix develop --no-pure-eval --command bash -c "cargo build --verbose"
+      - name: Setup Devenv
+        run: nix develop --no-pure-eval --command devenv up -D
 
-      - name: Run tests
-        run: nix develop --no-pure-eval --command bash -c "devenv up -D && cargo test --verbose && process-compose down"
+      - name: Build
+        run: nix develop --no-pure-eval --command cargo build
+
+      - name: Test
+        run: nix develop --no-pure-eval --command cargo test
