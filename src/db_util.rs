@@ -535,10 +535,7 @@ pub async fn send_notification(
     subscription_info: &SubscriptionInfo,
     body: &str,
 ) -> Result<()> {
-    let vapid_builder = VapidSignatureBuilder::from_base64_no_sub(
-        &push_client.vapid_private_key,
-        web_push::URL_SAFE_NO_PAD,
-    )?;
+    let vapid_builder = VapidSignatureBuilder::from_base64_no_sub(&push_client.vapid_private_key)?;
 
     let vapid_signature = vapid_builder
         .clone()
@@ -562,7 +559,7 @@ pub async fn send_notification(
         Err(err) => {
             let should_remove = matches!(
                 err,
-                WebPushError::EndpointNotValid | WebPushError::EndpointNotFound
+                WebPushError::EndpointNotValid(_) | WebPushError::EndpointNotFound(_)
             );
 
             if should_remove {

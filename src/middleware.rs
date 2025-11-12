@@ -10,7 +10,7 @@ use crate::models;
 pub fn configure_governor() -> GovernorConfig<PeerIpKeyExtractor, NoOpMiddleware<QuantaInstant>> {
     GovernorConfigBuilder::default()
         .permissive(true)
-        .per_second(60)
+        .seconds_per_request(60)
         .burst_size(100)
         .finish()
         .unwrap()
@@ -18,12 +18,12 @@ pub fn configure_governor() -> GovernorConfig<PeerIpKeyExtractor, NoOpMiddleware
 
 pub fn configure_cors() -> Cors {
     let cors = Cors::default()
-        // .allowed_origin("http://64.226.108.119:3000")
         .allow_any_origin()
         .allow_any_method()
         .allow_any_header();
     if cfg!(debug_assertions) {
         cors.allowed_origin("http://localhost:5173")
+            .allowed_origin("http://localhost:5174")
             .allowed_origin("http://localhost:4173")
             .allowed_origin("http://localhost:3000")
     } else {
