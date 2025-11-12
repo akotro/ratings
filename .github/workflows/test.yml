@@ -25,6 +25,13 @@ jobs:
           tags: tag:ci
       - uses: cachix/install-nix-action@v31
 
+      - name: Setup Nix Attic cache
+        uses: ryanccn/attic-action@v0
+        with:
+          endpoint: ${{ secrets.ATTIC_ENDPOINT }}
+          cache: ${{ secrets.ATTIC_CACHE }}
+          token: ${{ secrets.ATTIC_TOKEN }}
+
       - name: Cache Cargo registry and build outputs
         uses: actions/cache@v4
         with:
