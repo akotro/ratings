@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: [ "dev", "main" ]
+    branches: ["dev", "main"]
   pull_request:
-    branches: [ "dev", "main" ]
+    branches: ["dev", "main"]
   workflow_dispatch:
 
 env:
@@ -30,6 +30,9 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-unstable
           github_access_token: ${{ secrets.GH_TOKEN }}
+          extra_nix_config: |
+            substituters = https://cache.nixos.org/?priority=1 https://cache.tithe.stream?priority=2 https://devenv.cachix.org?priority=3 https://nix-community.cachix.org?priority=10 https://hyprland.cachix.org?priority=11
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= cache.tithe.stream-1:RD/1y82WcSzAO6zsLiF2Q+6iC37BF/5m8D4qtK66O3A= devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc=
 
       - name: Setup Nix Cache
         uses: DeterminateSystems/magic-nix-cache-action@main
@@ -47,6 +50,9 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
+
+      - name: Pre-build devShell
+        run: nix build --no-pure-eval --no-link .#devShells.$(nix eval --impure --raw --expr 'builtins.currentSystem').default
 
       - name: Setup Devenv
         run: nix develop --no-pure-eval --command devenv up -D
