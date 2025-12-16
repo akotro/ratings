@@ -12,7 +12,7 @@ actix-cors = "0.7"
 openssl = { version = "0.10", features = ["vendored"] }
 jsonwebtoken = {version = "10.2", features = ["rust_crypto"]}
 argon2 = "0.5"
-uuid = { version = "1.18", features = ["v4", "fast-rng", "macro-diagnostics"] }
+uuid = { version = "1.19", features = ["v4", "fast-rng", "macro-diagnostics"] }
 chrono = { version = "0.4", features = ["serde"] }
 log = "0.4"
 env_logger = "0.11"

@@ -18,19 +18,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
       - uses: tailscale/github-action@v4
         with:
           authkey: ${{ secrets.TS_AUTH_KEY }}
           statedir: /tmp/tailscale-state/
           tags: tag:ci
-      - uses: cachix/install-nix-action@v31
 
-      - name: Setup Nix Attic cache
-        uses: ryanccn/attic-action@v0
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
         with:
-          endpoint: ${{ secrets.ATTIC_ENDPOINT }}
-          cache: ${{ secrets.ATTIC_CACHE }}
-          token: ${{ secrets.ATTIC_TOKEN }}
+          nix_path: nixpkgs=channel:nixos-unstable
+          github_access_token: ${{ secrets.GH_TOKEN }}
+
+      - name: Setup Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          diagnostic-endpoint: ""
+          use-flakehub: false
 
       - name: Cache Cargo registry and build outputs
         uses: actions/cache@v4

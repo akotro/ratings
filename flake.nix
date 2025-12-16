@@ -107,7 +107,7 @@
               name = "frontend";
               src = ./frontend;
 
-              npmDepsHash = "sha256-DGFWzjHVvYmEF4zeB0XQaNyUfJBSsnl/0GF0rwNvGcI=";
+              npmDepsHash = "sha256-yZ6fjXHaho0rfwItUD3Op/O3J9yL8Zs1xt9NQNMXuXM=";
 
               installPhase = ''
                 runHook preInstall
@@ -161,6 +161,9 @@
 
                 rust
                 pkgs.rust-bin.stable.latest.rust-analyzer
+                pkgs.cargo-edit
+                pkgs.cargo-machete
+                pkgs.cargo-outdated
                 pkgs.sqlx-cli
                 pkgs.libmysqlclient.dev
 
