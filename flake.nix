@@ -153,6 +153,10 @@
             devenv.shells.default = {
               # https://devenv.sh/reference/options/
               packages = [
+                pkgs.just
+                pkgs.nix-fast-build
+                pkgs.nix-output-monitor
+
                 pkgs.pkg-config
                 pkgs.openssl
                 pkgs.gdb
