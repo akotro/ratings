@@ -179,7 +179,8 @@
               ];
 
               env = {
-                DATABASE_URL = "mysql://local:@127.0.0.1:3306/ratings";
+                # DATABASE_URL = "mysql://local:@127.0.0.1:3306/ratings";
+                DATABASE_URL = "mysql://root@127.0.0.1:3306/ratings";
               };
 
               services = {
@@ -188,13 +189,14 @@
                   package = pkgs.mariadb;
                   settings.mysqld = {
                     bind-address = "127.0.0.1";
+                    user = "root";
                   };
                   initialDatabases = [
                     { name = "ratings"; }
                   ];
                   ensureUsers = [
                     {
-                      name = "local";
+                      name = "root";
                       ensurePermissions = {
                         "*.*" = "ALL PRIVILEGES";
                       };
@@ -204,22 +206,18 @@
               };
 
               processes = {
-                mysql-configure.process-compose = {
-                  ready_log_line = "Adding user: local";
-                };
                 migrate = {
                   exec = # bash
                     ''
+                      echo "Creating database if it doesn't exist..."
+                      ${lib.getExe pkgs.sqlx-cli} database create
+
                       echo "Running migrations..."
                       ${lib.getExe pkgs.sqlx-cli} migrate run
+
+                      echo "Finished migrations!"
                     '';
-                  process-compose = {
-                    depends_on = {
-                      mysql-configure = {
-                        condition = "process_log_ready";
-                      };
-                    };
-                  };
+                  after = [ "devenv:processes:mysql@ready" ];
                 };
               };
             };

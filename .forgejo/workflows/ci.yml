@@ -12,7 +12,7 @@ env:
   JWT_SECRET: ${{ secrets.JWT_SECRET }}
   PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.PUBLIC_VAPID_PUBLIC_KEY }}
   VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-  DATABASE_URL: mysql://local:@127.0.0.1:3306/ratings
+  DATABASE_URL: mysql://root@127.0.0.1:3306/ratings
 
 jobs:
   build:
@@ -79,7 +79,18 @@ jobs:
             access-tokens = github.com=${{ secrets.GH_TOKEN }} git.akotro.dev=${{ secrets.FJ_TOKEN }}
 
       - name: Setup Devenv
-        run: nix develop --no-pure-eval --command devenv up --detach-on-success
+        run: nix develop --no-pure-eval --command devenv up -D
+
+      - name: Wait for devenv up
+        run: sleep 30
+
+      # - name: Print MySQL and Migrate logs
+      #   run: |
+      #     nix develop --no-pure-eval --command process-compose process logs mysql
+      #     nix develop --no-pure-eval --command process-compose process logs migrate
+      #
+      # - name: Print Process Compose logs
+      #   run: cat /tmp/process-compose-*.log
 
       - name: Build
         run: nix develop --no-pure-eval --command cargo build
