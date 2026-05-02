@@ -154,6 +154,7 @@
               # https://devenv.sh/reference/options/
               packages = [
                 pkgs.just
+                pkgs.just-lsp
                 pkgs.nix-fast-build
                 pkgs.nix-output-monitor
 
