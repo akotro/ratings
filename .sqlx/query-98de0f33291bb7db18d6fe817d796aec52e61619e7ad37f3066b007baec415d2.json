@@ -1,0 +1,84 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT *\n         FROM (\n            SELECT r.id, r.restaurant_code, r.group_id, r.cuisine,\n                IF(\n                    (\n                        SELECT COUNT(*) FROM group_memberships gm\n                        WHERE gm.group_id = ?\n                    ) = (\n                        SELECT COUNT(*) FROM ratings ra2\n                        WHERE ra2.group_id = ? AND ra2.restaurant_id = r.id AND ra2.created_at >= ? AND DATE(ra2.created_at) <= ?\n                    ),\n                    AVG(ra.score),\n                    NULL\n                ) AS avg_rating,\n                COUNT(ra.score) AS num_ratings,\n                (\n                    SELECT COUNT(*) FROM ratings ra3\n                    WHERE ra3.group_id = ? AND ra3.restaurant_id = r.id AND ra3.created_at >= ? AND DATE(ra3.created_at) <= ?\n                ) AS has_any_rating\n             FROM restaurants r\n             LEFT JOIN ratings ra ON ra.group_id = ? AND ra.restaurant_id = r.id AND ra.created_at >= ? AND DATE(ra.created_at) <= ?\n             WHERE r.group_id = ?\n             GROUP BY r.id\n         ) AS subquery\n         ORDER BY\n            avg_rating IS NULL ASC,\n            has_any_rating DESC,\n            avg_rating DESC,\n            id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "restaurant_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "group_id",
+        "type_info": {
+          "type": "String",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 144
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "cuisine",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "avg_rating",
+        "type_info": {
+          "type": "Double",
+          "flags": "",
+          "max_size": 16
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "num_ratings",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "NOT_NULL",
+          "max_size": 21
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "has_any_rating",
+        "type_info": {
+          "type": "LongLong",
+          "flags": "",
+          "max_size": 21
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 11
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "98de0f33291bb7db18d6fe817d796aec52e61619e7ad37f3066b007baec415d2"
+}

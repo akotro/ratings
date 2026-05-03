@@ -1,4 +1,5 @@
-[![Test](https://github.com/akotro/ratings/actions/workflows/test.yml/badge.svg)](https://github.com/akotro/ratings/actions/workflows/test.yml)
+<!-- [![CI](https://git.akotro.dev/akotro/ratings/badges/workflows/ci.yml/badge.svg?color=25be6a)](https://git.akotro.dev/akotro/ratings/actions?workflow=ci.yml) -->
+[![CI](https://git.akotro.dev/akotro/ratings/badges/workflows/ci.yml/badge.svg)](https://git.akotro.dev/akotro/ratings/actions?workflow=ci.yml)
 
 # Ratings
 

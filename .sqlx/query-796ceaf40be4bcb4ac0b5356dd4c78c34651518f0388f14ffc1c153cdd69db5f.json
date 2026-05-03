@@ -1,0 +1,64 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT\n            r.restaurant_id,\n            rest.restaurant_code,\n            IFNULL(YEAR(r.created_at), 0) as year,\n            IFNULL(\n                CASE\n                    WHEN MONTH(r.created_at) BETWEEN 1 AND 3 THEN 0\n                    WHEN MONTH(r.created_at) BETWEEN 4 AND 6 THEN 1\n                    WHEN MONTH(r.created_at) BETWEEN 7 AND 9 THEN 2\n                    ELSE 3\n                END,\n                0\n            ) as period,\n            IFNULL(AVG(r.score), 0) as average_score\n         FROM ratings r\n         JOIN restaurants rest on r.restaurant_id = rest.id\n         WHERE r.group_id = ? AND r.restaurant_id = ?\n         GROUP BY r.restaurant_id, rest.restaurant_code, year, period\n         ORDER BY year ASC, period ASC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "restaurant_id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "restaurant_code",
+        "type_info": {
+          "type": "VarString",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 1020
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "year",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 5
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "period",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 1
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "average_score",
+        "type_info": {
+          "type": "Double",
+          "flags": "NOT_NULL | BINARY",
+          "max_size": 16
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "796ceaf40be4bcb4ac0b5356dd4c78c34651518f0388f14ffc1c153cdd69db5f"
+}

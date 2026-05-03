@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "UPDATE restaurants\n         SET cuisine = ?, restaurant_code = ?\n         WHERE id = ? AND group_id = ?;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "15ed8b3c102c48c9772a8c53290ef88e97b1d936ec0343f33d2050439e40fd7f"
+}

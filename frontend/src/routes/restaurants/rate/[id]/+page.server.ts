@@ -1,31 +1,21 @@
 import axios from 'axios';
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
-import { RESTAURANTS_ENDPOINT } from '$lib/endpoints';
+import { env } from '$env/dynamic/public';
 import type { Restaurant } from '$lib/models';
-
-let restaurants: Array<Restaurant> = [];
 
 export const load: PageServerLoad = async ({ params }) => {
   const { id } = params;
 
   try {
-    const res = await axios.get(RESTAURANTS_ENDPOINT);
+    const res = await axios.get(`${env.PUBLIC_API_BASE_URL}/restaurants/${id}`);
     var data = await res.data;
-    // await new Promise((r) => setTimeout(r, 500));
     if (data.success && data.data) {
-      restaurants = data.data;
-
-      let restaurant = restaurants.find((restaurant) => restaurant.id === id);
-      if (!restaurant) {
-        return error(404, 'Restaurant not found');
-      }
-
       return {
-        restaurant
+        restaurant: data.data as Restaurant
       };
     } else {
-      return error(404, 'Restaurants not found');
+      return error(404, 'Restaurant not found');
     }
   } catch (err) {
     throw err;

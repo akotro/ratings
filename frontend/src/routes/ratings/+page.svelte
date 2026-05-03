@@ -72,7 +72,7 @@
         currentLabels = [];
         current_ratings.forEach((rating) => {
           currentDatasetData.push(rating.score);
-          currentLabels.push(rating.restaurant_id);
+          currentLabels.push(rating.restaurant_code);
         });
       }
     } catch (error) {
@@ -82,7 +82,7 @@
 
   $: if (selectedRestaurant) {
     const filteredRatings = historical_ratings.filter(
-      (rating) => rating.restaurant_id === selectedRestaurant
+      (rating) => rating.restaurant_code === selectedRestaurant
     );
     historicalAverageRating =
       filteredRatings.reduce((acc, cur) => acc + cur.average_score, 0) / filteredRatings.length;
@@ -144,7 +144,7 @@
                         on:click={() => goto(`/restaurants/rate/${row.restaurant_id}`)}
                         class="cursor-pointer hover:bg-primary-100"
                       >
-                        <td>{row.restaurant_id}</td>
+                        <td>{row.restaurant_code}</td>
                         <td>{row.score}</td>
                       </tr>
                     {/each}
@@ -188,8 +188,8 @@
                       <ListBoxItem
                         bind:group={selectedRestaurant}
                         name="medium"
-                        value={historical_rating.restaurant_id}
-                        >{historical_rating.restaurant_id}</ListBoxItem
+                        value={historical_rating.restaurant_code}
+                        >{historical_rating.restaurant_code}</ListBoxItem
                       >
                     {/each}
                   </ListBox>

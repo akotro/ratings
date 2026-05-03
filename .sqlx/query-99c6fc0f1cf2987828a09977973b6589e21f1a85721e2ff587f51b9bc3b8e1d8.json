@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color\n         FROM ratings r\n         JOIN users u on u.id = r.user_id\n         WHERE user_id = ? and group_id = ? AND created_at >= ? AND created_at <= ?",
+  "query": "SELECT r.id, r.group_id, r.restaurant_id, rest.restaurant_code, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color\n         FROM ratings r\n         JOIN users u on u.id = r.user_id\n         JOIN restaurants rest on r.restaurant_id = rest.id\n         WHERE r.user_id = ? and r.group_id = ? AND r.created_at >= ? AND r.created_at <= ?",
   "describe": {
     "columns": [
       {
@@ -25,13 +25,22 @@
         "ordinal": 2,
         "name": "restaurant_id",
         "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
+          "max_size": 11
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "restaurant_code",
+        "type_info": {
           "type": "VarString",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
           "max_size": 1020
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "user_id",
         "type_info": {
           "type": "String",
@@ -40,7 +49,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "score",
         "type_info": {
           "type": "Float",
@@ -49,7 +58,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "username",
         "type_info": {
           "type": "VarString",
@@ -58,7 +67,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "created_at",
         "type_info": {
           "type": "Datetime",
@@ -67,7 +76,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "updated_at",
         "type_info": {
           "type": "Datetime",
@@ -76,7 +85,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "color",
         "type_info": {
           "type": "VarString",
@@ -97,8 +106,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "c7a8ff95049b8b0f2cd80d26a1f3150885c5d7962821bac6c9a309d629320510"
+  "hash": "99c6fc0f1cf2987828a09977973b6589e21f1a85721e2ff587f51b9bc3b8e1d8"
 }

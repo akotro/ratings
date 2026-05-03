@@ -1,10 +1,3 @@
-mod auth;
-mod db_models;
-mod db_util;
-mod middleware;
-mod models;
-mod routes;
-
 use actix_governor::Governor;
 use actix_web::{
     middleware::Logger,
@@ -13,8 +6,10 @@ use actix_web::{
 };
 use dotenvy::dotenv;
 use env_logger::Env;
-use middleware::{configure_cors, configure_governor, json_error_handler};
-use routes::*;
+use ratings_lib::auth;
+use ratings_lib::db_util;
+use ratings_lib::middleware::{configure_cors, configure_governor, json_error_handler};
+use ratings_lib::routes::*;
 use std::{
     env,
     sync::{Arc, Mutex},
@@ -59,6 +54,8 @@ async fn main() -> anyhow::Result<()> {
                     .service(join_group_route)
                     .service(get_group_memberships_by_user_route)
                     .service(create_restaurant_route)
+                    .service(update_restaurant_route)
+                    .service(get_restaurant_route)
                     .service(get_restaurants_route)
                     .service(get_restaurants_with_avg_rating_route)
                     .service(get_restaurant_ratings_route)

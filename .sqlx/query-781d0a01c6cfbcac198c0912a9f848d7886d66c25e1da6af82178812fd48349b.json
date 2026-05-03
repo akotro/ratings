@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "INSERT INTO restaurants (group_id, cuisine, restaurant_code) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "781d0a01c6cfbcac198c0912a9f848d7886d66c25e1da6af82178812fd48349b"
+}

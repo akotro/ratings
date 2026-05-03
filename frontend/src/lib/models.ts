@@ -43,7 +43,9 @@ export interface GroupMembership {
 }
 
 export interface Restaurant {
-  id: string;
+  id: number;
+  group_id: string;
+  restaurant_code: string;
   cuisine: string;
 }
 
@@ -57,7 +59,8 @@ export enum Period {
 export interface Rating {
   id: number;
   group_id: string;
-  restaurant_id: string;
+  restaurant_id: number;
+  restaurant_code: string;
   user_id: string;
   username: string;
   score: number;
@@ -68,7 +71,7 @@ export interface Rating {
 }
 
 export interface NewRating {
-  restaurant_id: string;
+  restaurant_id: number;
   user_id: string;
   username: string;
   score: number;
@@ -83,7 +86,8 @@ export interface RatingsByPeriod {
 }
 
 export interface AverageRatingPerPeriod {
-  restaurant_id: string;
+  restaurant_id: number;
+  restaurant_code: string;
   year: number;
   period: Period;
   average_score: number;

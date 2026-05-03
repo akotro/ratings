@@ -60,7 +60,7 @@ pub fn generate_token(req: &HttpRequest, id: String, username: String) -> String
     .unwrap()
 }
 
-pub fn validate_token(req: &HttpRequest) -> Result<(), HttpResponse> {
+pub fn validate_token(req: &HttpRequest) -> Result<UserClaims, HttpResponse> {
     let token = req
         .headers()
         .get("Authorization")
@@ -89,7 +89,7 @@ pub fn validate_token(req: &HttpRequest) -> Result<(), HttpResponse> {
         return Err(HttpResponse::Unauthorized().finish());
     }
 
-    Ok(())
+    Ok(user_claims.claims)
 }
 
 pub async fn get_ip_blacklist(pool: MySqlPool) -> Result<Vec<String>> {

@@ -1,23 +1,18 @@
 <script lang="ts">
   import { user } from '../..//lib/store';
   import { RESTAURANTS_WITH_AVG_RATING_ENDPOINT } from '$lib/endpoints';
-  import type { Restaurant } from '$lib/models';
+  import { Role, type Restaurant } from '$lib/models';
   import axios from 'axios';
   import { onMount } from 'svelte';
   import { readTokenCookie } from '$lib/auth';
   import Loading from '$lib/loading.svelte';
   import { page } from '$app/stores';
-  import { Autocomplete, popup, type PopupSettings } from '@skeletonlabs/skeleton';
+  import SearchInput from '$lib/SearchInput.svelte';
 
   let restaurants: Array<[Restaurant, number]> = [];
   let filteredRestaurants: Array<[Restaurant, number]> = [];
   let searchInput = '';
   let restaurantOptions: Array<{ label: string; value: string }> = [];
-  let popupSettings: PopupSettings = {
-    event: 'focus-click',
-    target: 'popupAutocomplete',
-    placement: 'bottom'
-  };
 
   let checkingAuth = true;
 
@@ -42,15 +37,14 @@
       restaurants = data.data;
       filteredRestaurants = [...restaurants];
       restaurantOptions = restaurants.map(([restaurant]) => ({
-        label: restaurant.id,
-        value: restaurant.id
+        label: restaurant.restaurant_code,
+        value: restaurant.id.toString()
       }));
     } else {
       throw new Error('Failed getting restaurants');
     }
   }
 
-  $: filterRestaurants();
   $: {
     if (searchInput.trim() === '') {
       filteredRestaurants = [...restaurants];
@@ -61,7 +55,7 @@
 
   function filterRestaurants() {
     filteredRestaurants = restaurants.filter(([restaurant]) =>
-      restaurant.id.toLowerCase().includes(searchInput.toLowerCase())
+      restaurant.restaurant_code.toLowerCase().includes(searchInput.toLowerCase())
     );
   }
 
@@ -79,14 +73,12 @@
     <!-- </div> -->
   {:else if $user && $user.token.length > 0 && $user.groupMembership != null}
     <div class="flex flex-col w-full max-w-lg">
-      <input
-        class="input autocomplete mb-4"
-        type="search"
-        name="autocomplete-search"
-        bind:value={searchInput}
-        placeholder="Search..."
-        use:popup={popupSettings}
-      />
+      {#if $user.groupMembership.role === Role.Admin}
+        <div class="flex justify-end w-full mb-4">
+          <a href="/restaurants/manage" class="btn variant-filled-primary">Manage Restaurants</a>
+        </div>
+      {/if}
+      <SearchInput bind:value={searchInput} placeholder="Search..." />
 
       {#await get_restaurants($user.token, $user.groupMembership.group_id)}
         <div class="flex items-center justify-center my-12 flex-grow">
@@ -103,7 +95,7 @@
                 >
                   <div class="flex items-center">
                     <span class="badge bg-tertiary-500 mr-2">🍽️</span>
-                    <span class="text-left">{restaurant.id}</span>
+                    <span class="text-left">{restaurant.restaurant_code}</span>
                   </div>
                   {#if avg_rating > 0}
                     <span class="badge bg-secondary-500">{avg_rating.toFixed(2)}</span>

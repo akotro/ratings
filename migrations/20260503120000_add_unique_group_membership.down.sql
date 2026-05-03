@@ -1,0 +1,1 @@
+ALTER TABLE group_memberships DROP INDEX idx_group_user;

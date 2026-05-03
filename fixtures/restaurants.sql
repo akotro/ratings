@@ -1,1 +1,20 @@
-INSERT INTO restaurants (id, cuisine) VALUES ('test_restaurant', 'test_cuisine');
+-- First insert users
+INSERT INTO users (id, username, password, color) VALUES
+     ('test_id', 'test_username', 'test_password', '#9a79cf'),
+     ('test_id2', 'test_username2', 'test_password2', '#00c260'),
+     ('test_id3', 'test_username3', 'test_password3', '#496287') ON DUPLICATE KEY UPDATE username=username;
+
+-- Then insert groups
+INSERT INTO groups (id, name, description) VALUES
+     ('test_group_id1', 'test_group1', 'this is test group 1'),
+     ('test_group_id2', 'test_group2', 'this is test group 2') ON DUPLICATE KEY UPDATE name=name;
+
+-- Insert group memberships
+INSERT INTO group_memberships (group_id, user_id, role) VALUES
+     ('test_group_id1', 'test_id', 'admin'),
+     ('test_group_id1', 'test_id2', 'member'),
+     ('test_group_id2', 'test_id', 'admin') ON DUPLICATE KEY UPDATE role=role;
+
+-- Then insert restaurants (Explicitly setting id = 100)
+INSERT INTO restaurants (id, restaurant_code, group_id, cuisine) VALUES
+     (100, 'ARMYRA BY PAPAIOANNOU', 'test_group_id1', 'test_cuisine') ON DUPLICATE KEY UPDATE cuisine=cuisine;

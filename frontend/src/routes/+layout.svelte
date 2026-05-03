@@ -1,5 +1,4 @@
 <script lang="ts">
-  // Most of your app wide CSS should be put in this file
   import '../app.postcss';
   import {
     AppShell,
@@ -13,7 +12,8 @@
     popup,
     Toast,
     getToastStore,
-    type ToastSettings
+    type ToastSettings,
+    Modal
   } from '@skeletonlabs/skeleton';
   import { computePosition, autoUpdate, offset, shift, flip, arrow } from '@floating-ui/dom';
   import { user } from '$lib/store';
@@ -113,6 +113,7 @@
   </div>
 </Drawer>
 
+<Modal />
 <Toast />
 
 <!-- App Shell -->
@@ -141,20 +142,38 @@
 
       <svelte:fragment slot="trail">
         {#if $user && $user.token.length > 0}
-          <p class="badge btn-sm bg-violet-500">{$user.groupMembership?.group.name || '___'}</p>
           <div class="relative inline-block">
             <button
-              class="badge btn-sm variant-filled-secondary cursor-pointer"
+              class="btn btn-sm variant-ghost-secondary cursor-pointer flex items-center"
               use:popup={userPopup}
             >
-              {$user.username}
+              <span>👤</span>
+              <span class="hidden md:inline-block truncate max-w-[150px]">{$user.username}</span>
             </button>
-            <div class="card p-4 shadow-xl" data-popup="userPopup">
-              <div class="flex flex-col items-center">
-                <a class="btn btn-sm variant-filled-secondary w-full text-center" href="/profile">
-                  Profile
+            <div class="card p-2 shadow-xl z-50 min-w-[200px]" data-popup="userPopup">
+              <div class="flex flex-col gap-1">
+                <a
+                  href="/groups"
+                  class="btn variant-ghost hover:variant-soft-primary w-full flex flex-col items-start p-2 rounded"
+                >
+                  <span class="text-xs opacity-50 uppercase tracking-widest">Group ➔</span>
+                  <span
+                    class="font-bold text-lg truncate w-full text-left"
+                    title={$user.groupMembership?.group.name || 'None'}
+                  >
+                    {$user.groupMembership?.group.name || 'None'}
+                  </span>
                 </a>
-                <br />
+                <a
+                  href="/profile"
+                  class="btn variant-ghost hover:variant-soft-primary w-full flex flex-col items-start p-2 rounded"
+                >
+                  <span class="text-xs opacity-50 uppercase tracking-widest">User ➔</span>
+                  <span class="font-bold text-lg truncate w-full text-left" title={$user.username}>
+                    {$user.username}
+                  </span>
+                </a>
+                <hr class="opacity-50 my-1" />
                 <button
                   class="btn btn-sm variant-filled-primary w-full text-center"
                   on:click={logout}

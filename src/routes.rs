@@ -94,9 +94,10 @@ async fn get_users_route(pool: web::Data<MySqlPool>, req: HttpRequest) -> HttpRe
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let result = db_util::get_users(&pool).await;
     match result {
@@ -118,12 +119,17 @@ async fn update_user_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+    let user_id = id.into_inner();
+    if user_claims.id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error("Unauthorized".into()));
     }
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::update_user(&mut conn, &id, &user).await;
+    let result = db_util::update_user(&mut conn, &user_id, &user).await;
     match result {
         Ok(updated_user) => HttpResponse::Ok().json(ApiResponse::success(updated_user)),
         Err(error) => {
@@ -142,12 +148,17 @@ async fn delete_user_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+    let user_id = id.into_inner();
+    if user_claims.id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error("Unauthorized".into()));
     }
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::delete_user(&mut conn, &id).await;
+    let result = db_util::delete_user(&mut conn, &user_id).await;
     match result {
         Ok(rows) => HttpResponse::Ok().json(ApiResponse::success(rows.last_insert_id())),
         Err(error) => {
@@ -166,9 +177,10 @@ async fn push_subscribe_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
     let result = db_util::create_push_subscription(
@@ -196,9 +208,10 @@ async fn get_group_memberships_by_user_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
     let result = db_util::get_group_memberships_by_user(&mut conn, &user_id).await;
@@ -220,9 +233,10 @@ async fn create_group_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
     let result = db_util::create_group(&mut conn, &group.0).await;
@@ -244,14 +258,62 @@ async fn join_group_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
     let result = db_util::create_group_membership(&mut conn, &group_membership.0).await;
     match result {
         Ok(group_membership) => HttpResponse::Ok().json(ApiResponse::success(group_membership)),
+        Err(error) => {
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
+        }
+    }
+}
+
+#[put("/restaurants/{id}")]
+async fn update_restaurant_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    id: web::Path<i32>,
+    restaurant: web::Json<Restaurant>,
+) -> HttpResponse {
+    if let Err(err) = auth::validate_ip(&req) {
+        return err;
+    }
+
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+
+    let mut conn = db_util::get_connection(&pool).await.unwrap();
+
+    let group_membership = db_util::get_group_memberships_by_user(&mut conn, &user_claims.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|gm| gm.group_id == restaurant.group_id);
+
+    if let Some(membership) = group_membership {
+        if !matches!(membership.role, Role::Admin) {
+            return HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                "Only admins can update restaurants".to_string(),
+            ));
+        }
+    } else {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+            "User is not a member of this group".to_string(),
+        ));
+    }
+
+    let result = db_util::update_restaurant(&mut conn, id.into_inner(), &restaurant.0).await;
+    match result {
+        Ok(query_result) => {
+            HttpResponse::Ok().json(ApiResponse::success(query_result.rows_affected()))
+        }
         Err(error) => {
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
         }
@@ -268,9 +330,10 @@ async fn create_restaurant_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
     let result = db_util::create_restaurant(&mut conn, &restaurant.0).await;
@@ -283,15 +346,67 @@ async fn create_restaurant_route(
 }
 
 #[get("/restaurants")]
-async fn get_restaurants_route(pool: web::Data<MySqlPool>, req: HttpRequest) -> HttpResponse {
+async fn get_restaurants_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    query_params: web::Query<HashMap<String, String>>,
+) -> HttpResponse {
     if let Err(err) = auth::validate_ip(&req) {
         return err;
     }
 
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+
+    let group_id = match query_params.get("group_id") {
+        Some(group_id) => group_id,
+        None => {
+            return HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("group_id is missing".to_string()))
+        }
+    };
+
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::get_restaurants(&mut conn).await;
+
+    let group_membership = db_util::get_group_memberships_by_user(&mut conn, &user_claims.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|gm| gm.group_id == *group_id);
+
+    if group_membership.is_none() {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+            "User is not a member of this group".to_string(),
+        ));
+    }
+
+    let result = db_util::get_restaurants(&mut conn, group_id).await;
     match result {
         Ok(restaurants) => HttpResponse::Ok().json(ApiResponse::success(restaurants)),
+        Err(error) => {
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
+        }
+    }
+}
+
+#[get("/restaurants/{id}")]
+async fn get_restaurant_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    path: web::Path<i32>,
+) -> HttpResponse {
+    if let Err(err) = auth::validate_ip(&req) {
+        return err;
+    }
+
+    let restaurant_id = path.into_inner();
+
+    let mut conn = db_util::get_connection(&pool).await.unwrap();
+    let result = db_util::get_restaurant(&mut conn, restaurant_id).await;
+    match result {
+        Ok(restaurant) => HttpResponse::Ok().json(ApiResponse::success(restaurant)),
         Err(error) => {
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
         }
@@ -308,9 +423,10 @@ async fn get_restaurants_with_avg_rating_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let group_id = match query_params.get("group_id") {
         Some(group_id) => group_id,
@@ -337,16 +453,17 @@ async fn get_restaurants_with_avg_rating_route(
 async fn get_restaurant_ratings_route(
     pool: web::Data<MySqlPool>,
     req: HttpRequest,
-    id: web::Path<String>,
+    id: web::Path<i32>,
     query_params: web::Query<HashMap<String, String>>,
 ) -> HttpResponse {
     if let Err(err) = auth::validate_ip(&req) {
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let group_id = match query_params.get("group_id") {
         Some(group_id) => group_id,
@@ -358,7 +475,7 @@ async fn get_restaurant_ratings_route(
     };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::get_ratings_by_restaurant(&mut conn, &id, group_id).await;
+    let result = db_util::get_ratings_by_restaurant(&mut conn, id.into_inner(), group_id).await;
     match result {
         Ok(restaurant_ratings) => HttpResponse::Ok().json(ApiResponse::success(restaurant_ratings)),
         Err(error) => {
@@ -371,16 +488,17 @@ async fn get_restaurant_ratings_route(
 async fn get_restaurant_ratings_per_period_route(
     pool: web::Data<MySqlPool>,
     req: HttpRequest,
-    params: web::Path<(String, i32, Period)>,
+    params: web::Path<(i32, i32, Period)>,
     query_params: web::Query<HashMap<String, String>>,
 ) -> HttpResponse {
     if let Err(err) = auth::validate_ip(&req) {
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let (restaurant_id, year, period) = params.into_inner();
     let group_id = match query_params.get("group_id") {
@@ -396,7 +514,7 @@ async fn get_restaurant_ratings_per_period_route(
     let result = db_util::get_ratings_by_restaurant_per_period(
         &mut conn,
         group_id,
-        &restaurant_id,
+        restaurant_id,
         year,
         &period,
     )
@@ -414,16 +532,17 @@ async fn is_restaurant_rating_complete_route(
     pool: web::Data<MySqlPool>,
     push_client: web::Data<PushClient>,
     req: HttpRequest,
-    id: web::Path<String>,
+    id: web::Path<i32>,
     query_params: web::Query<HashMap<String, String>>,
 ) -> HttpResponse {
     if let Err(err) = auth::validate_ip(&req) {
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let group_id = match query_params.get("group_id") {
         Some(group_id) => group_id,
@@ -434,8 +553,13 @@ async fn is_restaurant_rating_complete_route(
         }
     };
 
-    let result =
-        db_util::is_restaurant_rating_complete(&pool, Some(&push_client), &id, group_id).await;
+    let result = db_util::is_restaurant_rating_complete(
+        &pool,
+        Some(&push_client),
+        id.into_inner(),
+        group_id,
+    )
+    .await;
     match result {
         Ok(is_rating_complete) => HttpResponse::Ok().json(ApiResponse::success(is_rating_complete)),
         Err(error) => {
@@ -448,18 +572,47 @@ async fn is_restaurant_rating_complete_route(
 async fn delete_restaurant_route(
     pool: web::Data<MySqlPool>,
     req: HttpRequest,
-    id: web::Path<String>,
+    id: web::Path<i32>,
+    query_params: web::Query<HashMap<String, String>>,
 ) -> HttpResponse {
     if let Err(err) = auth::validate_ip(&req) {
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+
+    let group_id = match query_params.get("group_id") {
+        Some(group_id) => group_id,
+        None => {
+            return HttpResponse::BadRequest()
+                .json(ApiResponse::<()>::error("group_id is missing".to_string()))
+        }
+    };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::delete_restaurant(&mut conn, &id).await;
+
+    let group_membership = db_util::get_group_memberships_by_user(&mut conn, &user_claims.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|gm| gm.group_id == *group_id);
+
+    if let Some(membership) = group_membership {
+        if !matches!(membership.role, Role::Admin) {
+            return HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+                "Only admins can delete restaurants".to_string(),
+            ));
+        }
+    } else {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error(
+            "User is not a member of this group".to_string(),
+        ));
+    }
+
+    let result = db_util::delete_restaurant(&mut conn, id.into_inner(), group_id).await;
     match result {
         Ok(rows) => HttpResponse::Ok().json(ApiResponse::success(rows.last_insert_id())),
         Err(error) => {
@@ -479,24 +632,32 @@ async fn rate_restaurant_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+    let user_id = user_id.into_inner();
+    if user_claims.id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error("Unauthorized".into()));
     }
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
 
+    let mut new_rating = rating.into_inner();
+    new_rating.user_id = user_claims.id.clone();
+
     let rated = db_util::is_restaurant_rated_by_user(
         &mut conn,
-        &rating.0.restaurant_id,
-        &user_id,
-        &rating.0.group_id,
+        new_rating.restaurant_id,
+        &new_rating.user_id,
+        &new_rating.group_id,
     )
     .await
     .unwrap_or_default();
 
     let result = match rated {
-        false => db_util::create_rating(&mut conn, &rating.0).await,
-        true => db_util::update_rating(&mut conn, &rating.0, &user_id).await,
+        false => db_util::create_rating(&mut conn, &new_rating).await,
+        true => db_util::update_rating(&mut conn, &new_rating, &user_id).await,
     };
     match result {
         Ok(rating) => HttpResponse::Ok().json(ApiResponse::success(rating)),
@@ -506,29 +667,30 @@ async fn rate_restaurant_route(
     }
 }
 
-#[get("/users/{user_id}/ratings")]
-async fn get_ratings_route(
-    pool: web::Data<MySqlPool>,
-    req: HttpRequest,
-    user_id: web::Path<String>,
-) -> HttpResponse {
-    if let Err(err) = auth::validate_ip(&req) {
-        return err;
-    }
-
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
-
-    let mut conn = db_util::get_connection(&pool).await.unwrap();
-    let result = db_util::get_ratings_by_user(&mut conn, &user_id).await;
-    match result {
-        Ok(ratings) => HttpResponse::Ok().json(ApiResponse::success(ratings)),
-        Err(error) => {
-            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
-        }
-    }
-}
+// #[get("/users/{user_id}/ratings")]
+// async fn get_ratings_route(
+//     pool: web::Data<MySqlPool>,
+//     req: HttpRequest,
+//     user_id: web::Path<String>,
+// ) -> HttpResponse {
+//     if let Err(err) = auth::validate_ip(&req) {
+//         return err;
+//     }
+//
+//     let _user_claims = match auth::validate_token(&req) {
+//         Ok(claims) => claims,
+//         Err(err) => return err,
+//     };
+//
+//     let mut conn = db_util::get_connection(&pool).await.unwrap();
+//     let result = db_util::get_ratings_by_user(&mut conn, &user_id).await;
+//     match result {
+//         Ok(ratings) => HttpResponse::Ok().json(ApiResponse::success(ratings)),
+//         Err(error) => {
+//             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
+//         }
+//     }
+// }
 
 #[get("/users/{user_id}/ratings")]
 async fn get_ratings_by_user_and_group_route(
@@ -541,9 +703,10 @@ async fn get_ratings_by_user_and_group_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let group_id = match query_params.get("group_id") {
         Some(group_id) => group_id,
@@ -568,18 +731,19 @@ async fn get_ratings_by_user_and_group_route(
 async fn get_rating_route(
     pool: web::Data<MySqlPool>,
     req: HttpRequest,
-    params: web::Path<(String, String)>,
+    params: web::Path<(String, i32)>,
     query_params: web::Query<HashMap<String, String>>,
 ) -> HttpResponse {
     if let Err(err) = auth::validate_ip(&req) {
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
-    let (user_id, restaurant_id) = params.into_inner();
+    let (user_id, restaurant_id): (String, i32) = params.into_inner();
     let group_id = match query_params.get("group_id") {
         Some(group_id) => group_id,
         None => {
@@ -591,7 +755,7 @@ async fn get_rating_route(
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
     let result =
-        db_util::get_rating_by_restaurant(&mut conn, &user_id, group_id, &restaurant_id).await;
+        db_util::get_rating_by_restaurant(&mut conn, &user_id, group_id, restaurant_id).await;
     match result {
         Ok(rating) => HttpResponse::Ok().json(ApiResponse::success(rating)),
         Err(error) => {
@@ -611,9 +775,10 @@ async fn update_rating_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let mut conn = db_util::get_connection(&pool).await.unwrap();
     let result = db_util::update_rating(&mut conn, &rating.0, &user_id).await;
@@ -636,9 +801,10 @@ async fn delete_rating_route(
         return err;
     }
 
-    if let Err(err) = auth::validate_token(&req) {
-        return err;
-    }
+    let _user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
 
     let (user_id, rating_id) = params.into_inner();
     let group_id = match query_params.get("group_id") {

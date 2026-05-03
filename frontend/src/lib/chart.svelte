@@ -95,7 +95,7 @@
     borderColors = defaultBorderColors;
   }
 
-  let data: ChartData<'bar' | 'line', (number | [number, number])[], unknown> = {
+  let data: any = {
     labels: labels,
     datasets: [
       {

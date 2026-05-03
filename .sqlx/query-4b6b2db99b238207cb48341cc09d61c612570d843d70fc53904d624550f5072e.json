@@ -1,6 +1,6 @@
 {
   "db_name": "MySQL",
-  "query": "SELECT id, restaurant_id, group_id, notified_at\n         FROM rating_notifications\n         WHERE id = ?",
+  "query": "SELECT id, restaurant_code, group_id, cuisine FROM restaurants WHERE group_id = ? ORDER BY id",
   "describe": {
     "columns": [
       {
@@ -14,11 +14,11 @@
       },
       {
         "ordinal": 1,
-        "name": "restaurant_id",
+        "name": "restaurant_code",
         "type_info": {
-          "type": "Long",
+          "type": "VarString",
           "flags": "NOT_NULL | MULTIPLE_KEY | NO_DEFAULT_VALUE",
-          "max_size": 11
+          "max_size": 1020
         }
       },
       {
@@ -32,11 +32,11 @@
       },
       {
         "ordinal": 3,
-        "name": "notified_at",
+        "name": "cuisine",
         "type_info": {
-          "type": "Datetime",
-          "flags": "NOT_NULL | BINARY",
-          "max_size": 19
+          "type": "VarString",
+          "flags": "NOT_NULL | NO_DEFAULT_VALUE",
+          "max_size": 1020
         }
       }
     ],
@@ -50,5 +50,5 @@
       false
     ]
   },
-  "hash": "8641c16b54eed4fae1afc46ab30fc1186e857bd7af7c2eb622a20259237df972"
+  "hash": "4b6b2db99b238207cb48341cc09d61c612570d843d70fc53904d624550f5072e"
 }

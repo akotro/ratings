@@ -41,7 +41,7 @@ pub struct NewPushSubscription {
 pub struct RatingNotification {
     pub id: i32,
     pub group_id: String,
-    pub restaurant_id: String,
+    pub restaurant_id: i32,
     pub notified_at: NaiveDateTime,
 }
 
@@ -107,16 +107,17 @@ impl GroupMembership {
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Restaurant {
-    pub id: String,
+    pub id: i32,
+    pub restaurant_code: String,
+    pub group_id: String,
     pub cuisine: String,
-    pub menu: Vec<MenuItem>,
     // TODO: Add active, so that we can enable or disable in the admin panel
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MenuItem {
     pub id: i32,
-    pub restaurant_id: String,
+    pub restaurant_id: i32,
     pub name: String,
     pub price: f32,
 }
@@ -220,7 +221,8 @@ impl Period {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rating {
     pub id: i32,
-    pub restaurant_id: String,
+    pub restaurant_id: i32,
+    pub restaurant_code: String,
     pub user_id: String,
     pub username: String,
     pub score: f32,
@@ -240,6 +242,7 @@ impl Default for Rating {
             period: Period::from_date(default_datetime.date()),
             id: Default::default(),
             restaurant_id: Default::default(),
+            restaurant_code: Default::default(),
             user_id: Default::default(),
             username: Default::default(),
             score: Default::default(),
@@ -254,7 +257,8 @@ impl Rating {
     pub fn new(
         id: i32,
         group_id: String,
-        restaurant_id: String,
+        restaurant_id: i32,
+        restaurant_code: String,
         user_id: String,
         username: String,
         score: f32,
@@ -265,6 +269,7 @@ impl Rating {
         Self {
             id,
             restaurant_id,
+            restaurant_code,
             user_id,
             username,
             score,
@@ -280,7 +285,8 @@ impl Rating {
         Self::new(
             db_rating.id,
             db_rating.group_id.clone(),
-            db_rating.restaurant_id.clone(),
+            db_rating.restaurant_id,
+            db_rating.restaurant_code.clone(),
             db_rating.user_id.clone(),
             db_rating.username.clone(),
             db_rating.score,
@@ -301,7 +307,8 @@ pub struct RatingsByPeriod {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AverageRatingPerPeriod {
-    pub restaurant_id: String,
+    pub restaurant_id: i32,
+    pub restaurant_code: String,
     pub year: i32,
     pub period: Period,
     pub average_score: f64,
@@ -347,16 +354,12 @@ where
             if let Some(data) = api_response.data {
                 Ok(data)
             } else {
-                Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                Err(Box::new(std::io::Error::other(
                     "Data is missing in successful response",
                 )))
             }
         } else {
-            Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                api_response.message,
-            )))
+            Err(Box::new(std::io::Error::other(api_response.message)))
         }
     }
 }

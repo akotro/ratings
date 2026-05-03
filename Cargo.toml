@@ -5,11 +5,18 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[lib]
+name = "ratings_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ratings"
+path = "src/main.rs"
+
 [dependencies]
-actix-web = { version = "4", features = ["openssl"] }
+actix-web = { version = "4", features = ["rustls"] }
 actix-governor = "0.10"
 actix-cors = "0.7"
-openssl = { version = "0.10", features = ["vendored"] }
 jsonwebtoken = {version = "10.2", features = ["rust_crypto"]}
 argon2 = "0.5"
 uuid = { version = "1.19", features = ["v4", "fast-rng", "macro-diagnostics"] }

@@ -107,7 +107,7 @@
               name = "frontend";
               src = ./frontend;
 
-              npmDepsHash = "sha256-yZ6fjXHaho0rfwItUD3Op/O3J9yL8Zs1xt9NQNMXuXM=";
+              npmDepsHash = "sha256-TpVwps5Qs7U5yt/KWFWmyB59sZ+tGd0gSAMMBVqTuyM=";
 
               installPhase = ''
                 runHook preInstall
@@ -146,7 +146,6 @@
 
             packages = {
               inherit ratings frontend;
-
               default = full;
             };
 
@@ -157,6 +156,7 @@
                 pkgs.just-lsp
                 pkgs.nix-fast-build
                 pkgs.nix-output-monitor
+                pkgs.pi-coding-agent
 
                 pkgs.pkg-config
                 pkgs.openssl
@@ -177,10 +177,11 @@
                 pkgs.tailwindcss-language-server
                 pkgs.typescript-language-server
                 pkgs.vtsls
+
               ];
 
               env = {
-                # DATABASE_URL = "mysql://local:@127.0.0.1:3306/ratings";
+                CODELLDB_PATH = "${pkgs.vscode-extensions.vadimcn.vscode-lldb}/share/vscode/extensions/vadimcn.vscode-lldb/adapter/codelldb";
                 DATABASE_URL = "mysql://root@127.0.0.1:3306/ratings";
               };
 

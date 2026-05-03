@@ -13,7 +13,8 @@
     NewRating,
     Period,
     Rating,
-    RatingsByPeriod
+    RatingsByPeriod,
+    Restaurant
   } from '$lib/models.js';
   import Chart from '$lib/chart.svelte';
   import { onMount } from 'svelte';
@@ -21,7 +22,7 @@
   import { TabGroup, Tab } from '@skeletonlabs/skeleton';
 
   export let data;
-  export let id: string = data.restaurant.id;
+  let restaurant: Restaurant = data.restaurant;
 
   let isRatingComplete = false;
   let hasRated = false;
@@ -65,7 +66,7 @@
     try {
       if ($user && $user.token.length > 0 && $user.groupMembership != null) {
         const response = await axios.get(
-          GET_RATING_ENDPOINT($user.id, id, $user.groupMembership.group_id),
+          GET_RATING_ENDPOINT($user.id, restaurant.id, $user.groupMembership.group_id),
           {
             headers: {
               'Content-Type': 'application/json',
@@ -99,7 +100,7 @@
           RATE_ENDPOINT($user.id),
           {
             id: -1,
-            restaurant_id: id,
+            restaurant_id: restaurant.id,
             user_id: $user.id,
             username: $user.username,
             score: rating,
@@ -135,7 +136,7 @@
       }
       if ($user && $user.token.length > 0 && $user.groupMembership != null) {
         const response = await axios.get(
-          RESTAURANT_RATING_COMPLETE_ENDPOINT(id, $user.groupMembership.group_id),
+          RESTAURANT_RATING_COMPLETE_ENDPOINT(restaurant.id, $user.groupMembership.group_id),
           {
             headers: {
               'Content-Type': 'application/json',
@@ -160,7 +161,7 @@
     try {
       if ($user && $user.token.length > 0 && $user.groupMembership != null) {
         const response = await axios.get(
-          GET_RESTAURANT_RATINGS_ENDPOINT(id, $user.groupMembership.group_id),
+          GET_RESTAURANT_RATINGS_ENDPOINT(restaurant.id, $user.groupMembership.group_id),
           {
             headers: {
               'Content-Type': 'application/json',
@@ -224,7 +225,7 @@
     <!--   <Loading /> -->
     <!-- </div> -->
   {:then}
-    <h1 class="text-center text-5xl font-bold my-4 mb-4">{id}</h1>
+    <h1 class="text-center text-5xl font-bold my-4 mb-4">{restaurant.restaurant_code}</h1>
     <h2 class="text-center text-xl font-bold mb-4">Rate It!</h2>
 
     <div class="flex text-center justify-center space-x-2">

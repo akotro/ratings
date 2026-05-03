@@ -1,0 +1,1 @@
+ALTER TABLE group_memberships ADD UNIQUE INDEX idx_group_user (group_id, user_id);

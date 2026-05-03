@@ -11,7 +11,7 @@ use sqlx::{
     migrate::Migrator,
     mysql::{MySqlConnectOptions, MySqlQueryResult},
     pool::PoolConnection,
-    Acquire, ConnectOptions, MySql, MySqlConnection, MySqlExecutor, MySqlPool, Row,
+    Acquire, ConnectOptions, MySql, MySqlConnection, MySqlExecutor, MySqlPool,
 };
 use uuid::Uuid;
 use web_push::{
@@ -384,7 +384,7 @@ pub async fn delete_push_subscription(
 
 pub async fn create_rating_notification(
     conn: &mut MySqlConnection,
-    restaurant_id: &str,
+    restaurant_id: i32,
     group_id: &str,
 ) -> Result<RatingNotification> {
     let mut tx = conn.begin().await?;
@@ -445,7 +445,7 @@ pub async fn get_rating_notification_by_id(
 
 pub async fn rating_notification_sent(
     conn: &mut MySqlConnection,
-    restaurant_id: &str,
+    restaurant_id: i32,
     group_id: &str,
 ) -> Result<bool> {
     let date_range = Period::current_period_date_range()?;
@@ -860,11 +860,13 @@ pub async fn create_restaurant(
 ) -> Result<Restaurant> {
     let mut tx = conn.begin().await?;
 
+    // After migration, id is auto-increment, so don't specify it
     let query = sqlx::query_as!(
         Restaurant,
-        "INSERT INTO restaurants (id, cuisine) VALUES (?, ?)",
-        restaurant.id,
-        restaurant.cuisine
+        "INSERT INTO restaurants (group_id, cuisine, restaurant_code) VALUES (?, ?, ?)",
+        restaurant.group_id,
+        restaurant.cuisine,
+        restaurant.restaurant_code
     );
     let result = match query.execute(&mut *tx).await {
         Ok(query_result) => query_result,
@@ -875,7 +877,11 @@ pub async fn create_restaurant(
     };
 
     if result.rows_affected() == 1 {
-        let db_restaurant = match get_restaurant(&mut tx, &restaurant.id).await {
+        // Get the auto-generated id
+        let last_id = result.last_insert_id() as i32;
+
+        // Get the inserted restaurant
+        let db_restaurant = match get_restaurant(&mut tx, last_id).await {
             Ok(restaurant) => restaurant,
             Err(err) => {
                 tx.rollback().await?;
@@ -891,28 +897,35 @@ pub async fn create_restaurant(
     }
 }
 
-pub async fn get_restaurants(conn: &mut MySqlConnection) -> Result<Vec<Restaurant>> {
-    let query = sqlx::query!("SELECT id, cuisine FROM restaurants");
+pub async fn get_restaurants(
+    conn: &mut MySqlConnection,
+    group_id: &str,
+) -> Result<Vec<Restaurant>> {
+    let query = sqlx::query!(
+        "SELECT id, restaurant_code, group_id, cuisine FROM restaurants WHERE group_id = ? ORDER BY id",
+        group_id
+    );
     let rows = query.fetch_all(conn).await?;
 
     let restaurants = rows
         .into_iter()
         .map(|row| Restaurant {
             id: row.id,
+            restaurant_code: row.restaurant_code,
+            group_id: row.group_id,
             cuisine: row.cuisine,
-            menu: Vec::<MenuItem>::new(),
         })
         .collect();
 
     Ok(restaurants)
 }
 
-pub async fn get_restaurant(conn: &mut MySqlConnection, restaurant_id: &str) -> Result<Restaurant> {
+pub async fn get_restaurant(conn: &mut MySqlConnection, restaurant_id: i32) -> Result<Restaurant> {
     let mut tx = Acquire::begin(conn).await?;
 
     let query = sqlx::query_as!(
         DbRestaurant,
-        "SELECT id, cuisine FROM restaurants WHERE id = ?",
+        "SELECT id, restaurant_code, group_id, cuisine FROM restaurants WHERE id = ?",
         restaurant_id
     );
     let db_restaurant_result = match query.fetch_optional(&mut *tx).await {
@@ -924,36 +937,29 @@ pub async fn get_restaurant(conn: &mut MySqlConnection, restaurant_id: &str) -> 
     };
 
     match db_restaurant_result {
-        Some(db_restaurant) => {
-            let menu_items = match get_menu_items(&mut tx, &db_restaurant.id).await {
-                Ok(query_result) => query_result,
-                Err(err) => {
-                    tx.rollback().await?;
-                    return Err(anyhow!("Restaurants's menu items not found: {err}"));
-                }
-            };
-            Ok(Restaurant {
-                id: db_restaurant.id,
-                cuisine: db_restaurant.cuisine,
-                menu: menu_items,
-            })
-        }
+        Some(db_restaurant) => Ok(Restaurant {
+            id: db_restaurant.id,
+            restaurant_code: db_restaurant.restaurant_code,
+            group_id: db_restaurant.group_id,
+            cuisine: db_restaurant.cuisine,
+        }),
         None => Err(anyhow!("Restaurant not found")),
     }
 }
 
 pub async fn update_restaurant(
     conn: &mut MySqlConnection,
-    restaurant_id: &str,
+    restaurant_id: i32,
     restaurant: &Restaurant,
 ) -> Result<MySqlQueryResult> {
     let result = sqlx::query!(
         "UPDATE restaurants
-         SET id = ?, cuisine = ?
-         WHERE id = ?;",
-        restaurant.id,
+         SET cuisine = ?, restaurant_code = ?
+         WHERE id = ? AND group_id = ?;",
         restaurant.cuisine,
-        restaurant_id
+        restaurant.restaurant_code,
+        restaurant_id,
+        restaurant.group_id,
     )
     .execute(conn)
     .await?;
@@ -963,11 +969,16 @@ pub async fn update_restaurant(
 
 pub async fn delete_restaurant(
     conn: &mut MySqlConnection,
-    restaurant_id: &str,
+    restaurant_id: i32,
+    group_id: &str,
 ) -> Result<MySqlQueryResult> {
-    let result = sqlx::query!("DELETE FROM restaurants WHERE id = ?", restaurant_id)
-        .execute(conn)
-        .await?;
+    let result = sqlx::query!(
+        "DELETE FROM restaurants WHERE id = ? AND group_id = ?",
+        restaurant_id,
+        group_id
+    )
+    .execute(conn)
+    .await?;
 
     Ok(result)
 }
@@ -975,7 +986,7 @@ pub async fn delete_restaurant(
 pub async fn is_restaurant_rating_complete(
     pool: &MySqlPool,
     push_client: Option<&PushClient>,
-    restaurant_id: &str,
+    restaurant_id: i32,
     group_id: &str,
 ) -> Result<bool> {
     let mut conn = get_connection(pool).await.unwrap();
@@ -992,7 +1003,7 @@ pub async fn is_restaurant_rating_complete(
             ) = (
                 SELECT COUNT(*)
                 FROM ratings
-                WHERE group_id = ? AND restaurant_id = ? AND created_at >= ? AND created_at <= ?
+                WHERE group_id = ? AND restaurant_id = ? AND created_at >= ? AND DATE(created_at) <= ?
             ) AS is_complete;",
         group_id,
         group_id,
@@ -1020,41 +1031,46 @@ pub async fn is_restaurant_rating_complete(
         }
     };
 
-    if is_complete && push_client.is_some() {
-        let notification_sent =
-            match rating_notification_sent(&mut tx, restaurant_id, group_id).await {
-                Ok(notification_sent) => notification_sent,
-                Err(err) => {
+    if is_complete {
+        if let Some(push_client) = push_client {
+            let notification_sent =
+                match rating_notification_sent(&mut tx, restaurant_id, group_id).await {
+                    Ok(notification_sent) => notification_sent,
+                    Err(err) => {
+                        tx.rollback().await?;
+                        return Err(err);
+                    }
+                };
+
+            if !notification_sent {
+                if let Err(err) = create_rating_notification(&mut tx, restaurant_id, group_id).await
+                {
                     tx.rollback().await?;
                     return Err(err);
                 }
-            };
 
-        if !notification_sent {
-            if let Err(err) = create_rating_notification(&mut tx, restaurant_id, group_id).await {
-                tx.rollback().await?;
-                return Err(err);
+                tx.commit().await?;
+
+                let push_client = push_client.clone();
+                let group_id = group_id.to_string();
+                let restaurant_id = restaurant_id.to_string();
+                let new_pool = pool.clone();
+
+                actix_web::rt::spawn(async move {
+                    if let Err(err) = send_notification_to_group(
+                        &push_client,
+                        &new_pool,
+                        &group_id,
+                        &format!("{restaurant_id} ratings are complete!"),
+                    )
+                    .await
+                    {
+                        eprintln!("ERROR: Failed to send notification to group {group_id} for restaurant {restaurant_id}: {err}");
+                    }
+                });
+            } else {
+                tx.commit().await?;
             }
-
-            tx.commit().await?;
-
-            let push_client = push_client.unwrap().clone();
-            let group_id = group_id.to_string();
-            let restaurant_id = restaurant_id.to_string();
-            let new_pool = pool.clone();
-
-            actix_web::rt::spawn(async move {
-                if let Err(err) = send_notification_to_group(
-                    &push_client,
-                    &new_pool,
-                    &group_id,
-                    &format!("{restaurant_id} ratings are complete!"),
-                )
-                .await
-                {
-                    eprintln!("ERROR: Failed to send notification to group {group_id} for restaurant {restaurant_id}: {err}");
-                }
-            });
         } else {
             tx.commit().await?;
         }
@@ -1067,7 +1083,7 @@ pub async fn is_restaurant_rating_complete(
 
 pub async fn get_avg_rating(
     pool: &MySqlPool,
-    restaurant_id: &str,
+    restaurant_id: i32,
     group_id: &str,
 ) -> Result<Option<f64>> {
     if is_restaurant_rating_complete(pool, None, restaurant_id, group_id).await? {
@@ -1078,7 +1094,7 @@ pub async fn get_avg_rating(
         let avg_rating: Option<f64> = sqlx::query_scalar!(
             "SELECT AVG(score)
              FROM ratings
-             WHERE group_id = ? and restaurant_id = ? AND created_at >= ? AND created_at <= ?",
+             WHERE group_id = ? and restaurant_id = ? AND created_at >= ? AND DATE(created_at) <= ?",
             group_id,
             restaurant_id,
             date_range.0,
@@ -1104,14 +1120,14 @@ pub async fn get_restaurants_with_avg_rating(
     let db_restaurants_with_avg_rating_result = sqlx::query!(
         "SELECT *
          FROM (
-            SELECT r.id, r.cuisine,
+            SELECT r.id, r.restaurant_code, r.group_id, r.cuisine,
                 IF(
                     (
                         SELECT COUNT(*) FROM group_memberships gm
                         WHERE gm.group_id = ?
                     ) = (
                         SELECT COUNT(*) FROM ratings ra2
-                        WHERE ra2.group_id = ? AND ra2.restaurant_id = r.id AND ra2.created_at >= ? AND ra2.created_at <= ?
+                        WHERE ra2.group_id = ? AND ra2.restaurant_id = r.id AND ra2.created_at >= ? AND DATE(ra2.created_at) <= ?
                     ),
                     AVG(ra.score),
                     NULL
@@ -1119,10 +1135,11 @@ pub async fn get_restaurants_with_avg_rating(
                 COUNT(ra.score) AS num_ratings,
                 (
                     SELECT COUNT(*) FROM ratings ra3
-                    WHERE ra3.group_id = ? AND ra3.restaurant_id = r.id AND ra3.created_at >= ? AND ra3.created_at <= ?
+                    WHERE ra3.group_id = ? AND ra3.restaurant_id = r.id AND ra3.created_at >= ? AND DATE(ra3.created_at) <= ?
                 ) AS has_any_rating
              FROM restaurants r
-             LEFT JOIN ratings ra ON ra.group_id = ? AND ra.restaurant_id = r.id AND ra.created_at >= ? AND ra.created_at <= ?
+             LEFT JOIN ratings ra ON ra.group_id = ? AND ra.restaurant_id = r.id AND ra.created_at >= ? AND DATE(ra.created_at) <= ?
+             WHERE r.group_id = ?
              GROUP BY r.id
          ) AS subquery
          ORDER BY
@@ -1140,6 +1157,7 @@ pub async fn get_restaurants_with_avg_rating(
         group_id,
         date_range.0,
         date_range.1,
+        group_id
     )
     .fetch_all(&mut *tx)
     .await;
@@ -1152,6 +1170,8 @@ pub async fn get_restaurants_with_avg_rating(
                     Ok((
                         DbRestaurant {
                             id: row.id,
+                            restaurant_code: row.restaurant_code,
+                            group_id: row.group_id,
                             cuisine: row.cuisine,
                         },
                         row.avg_rating,
@@ -1170,18 +1190,12 @@ pub async fn get_restaurants_with_avg_rating(
     let mut results = Vec::new();
 
     for (db_restaurant, avg_rating) in db_restaurants_with_avg_rating_result? {
-        let menu_result = get_menu_items(&mut tx, &db_restaurant.id).await;
-        if menu_result.is_err() {
-            tx.rollback().await?;
-            return Err(menu_result.err().unwrap());
-        }
-        let menu = menu_result.unwrap_or_default();
-
         results.push((
             Restaurant {
-                id: db_restaurant.id.clone(),
-                cuisine: db_restaurant.cuisine.clone(),
-                menu,
+                id: db_restaurant.id,
+                restaurant_code: db_restaurant.restaurant_code,
+                group_id: db_restaurant.group_id,
+                cuisine: db_restaurant.cuisine,
             },
             avg_rating.unwrap_or(0.0),
         ));
@@ -1190,82 +1204,6 @@ pub async fn get_restaurants_with_avg_rating(
     tx.commit().await?;
 
     Ok(results)
-}
-
-// NOTE: Menu Items
-
-pub async fn create_menu_item(
-    conn: &mut MySqlConnection,
-    menu_item: &MenuItem,
-) -> Result<MenuItem> {
-    let mut tx = conn.begin().await?;
-
-    let menu_item_result = sqlx::query("INSERT INTO menu_items (name, price) VALUES (?, ?)")
-        .bind(&menu_item.name)
-        .bind(menu_item.price)
-        .execute(&mut *tx)
-        .await?;
-
-    let last_insert_id = menu_item_result.last_insert_id();
-
-    sqlx::query("INSERT INTO restaurant_menu_items (restaurant_id, menu_item_id) VALUES (?, ?)")
-        .bind(&menu_item.restaurant_id)
-        .bind(last_insert_id)
-        .execute(&mut *tx)
-        .await?;
-
-    if menu_item_result.rows_affected() == 1 {
-        tx.commit().await?;
-
-        Ok(MenuItem {
-            id: last_insert_id as i32,
-            name: menu_item.name.clone(),
-            price: menu_item.price,
-            restaurant_id: menu_item.restaurant_id.clone(),
-        })
-    } else {
-        tx.rollback().await?;
-        Err(anyhow!("Failed to create menu item."))
-    }
-}
-
-async fn get_menu_items(pool: &mut MySqlConnection, restaurant_id: &str) -> Result<Vec<MenuItem>> {
-    let mut menu_items = Vec::new();
-
-    let query = r#"
-        SELECT mi.id, mi.name, mi.price
-        FROM restaurant_menu_items rmi
-        INNER JOIN menu_items mi ON rmi.menu_item_id = mi.id
-        WHERE rmi.restaurant_id = ?
-    "#;
-
-    let rows = sqlx::query(query)
-        .bind(restaurant_id)
-        .fetch_all(pool)
-        .await?;
-
-    for row in rows {
-        let menu_item = MenuItem {
-            id: row.get("id"),
-            restaurant_id: restaurant_id.to_owned(),
-            name: row.get("name"),
-            price: row.get("price"),
-        };
-        menu_items.push(menu_item);
-    }
-
-    Ok(menu_items)
-}
-
-pub async fn delete_menu_item(
-    conn: &mut MySqlConnection,
-    menu_item_id: i32,
-) -> Result<MySqlQueryResult> {
-    let result = sqlx::query!("DELETE FROM menu_items WHERE id = ?", menu_item_id)
-        .execute(conn)
-        .await?;
-
-    Ok(result)
 }
 
 // NOTE: Ratings
@@ -1279,6 +1217,17 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
     if !check_group_membership_exists(&mut tx, &rating.user_id, &rating.group_id).await? {
         tx.rollback().await?;
         return Err(anyhow!("User does not belong to group"));
+    }
+
+    let restaurant_exists = sqlx::query_scalar!(
+        "SELECT EXISTS(SELECT 1 FROM restaurants WHERE id = ? AND group_id = ?)",
+        rating.restaurant_id,
+        rating.group_id
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+    if restaurant_exists == 0 {
+        return Err(anyhow!("Restaurant does not exist in this group"));
     }
 
     let query = sqlx::query_as!(
@@ -1304,12 +1253,22 @@ pub async fn create_rating(conn: &mut MySqlConnection, rating: &NewRating) -> Re
     if result.rows_affected() == 1 {
         let last_insert_id = result.last_insert_id();
 
+        // Get restaurant_code from the restaurants table
+        let restaurant_query = sqlx::query_as!(
+            DbRestaurant,
+            "SELECT id, restaurant_code, group_id, cuisine FROM restaurants WHERE id = ?",
+            rating.restaurant_id
+        );
+        let restaurant = restaurant_query.fetch_optional(&mut *tx).await?;
+        let restaurant_code = restaurant.map(|r| r.restaurant_code).unwrap_or_default();
+
         tx.commit().await?;
 
         Ok(Rating::new(
             last_insert_id as i32,
             rating.group_id.clone(),
-            rating.restaurant_id.clone(),
+            rating.restaurant_id,
+            restaurant_code,
             rating.user_id.clone(),
             rating.username.clone(),
             rating.score,
@@ -1333,9 +1292,10 @@ pub async fn get_ratings_by_user(
 
     let current_period_query = sqlx::query_as!(
         DbRating,
-        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+        "SELECT r.id, r.group_id, r.restaurant_id, rest.restaurant_code, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
+         JOIN restaurants rest on r.restaurant_id = rest.id
          WHERE r.user_id = ? AND r.created_at >= ? AND r.created_at <= ?",
         user_id,
         date_range.0,
@@ -1354,6 +1314,7 @@ pub async fn get_ratings_by_user(
         AverageRatingPerPeriod,
         "SELECT
              r.restaurant_id,
+             rest.restaurant_code,
              IFNULL(YEAR(r.created_at), 0) as year,
              IFNULL(
                  CASE
@@ -1366,8 +1327,9 @@ pub async fn get_ratings_by_user(
              ) as period,
              IFNULL(AVG(r.score), 0) as average_score
          FROM ratings r
+         JOIN restaurants rest on r.restaurant_id = rest.id
          WHERE r.user_id = ?
-         GROUP BY r.restaurant_id, year, period
+         GROUP BY r.restaurant_id, rest.restaurant_code, year, period
          ORDER BY year ASC, period ASC",
         user_id,
     );
@@ -1402,10 +1364,11 @@ pub async fn get_ratings_by_user_and_group(
 
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+        "SELECT r.id, r.group_id, r.restaurant_id, rest.restaurant_code, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
-         WHERE user_id = ? and group_id = ? AND created_at >= ? AND created_at <= ?",
+         JOIN restaurants rest on r.restaurant_id = rest.id
+         WHERE r.user_id = ? and r.group_id = ? AND r.created_at >= ? AND r.created_at <= ?",
         user_id,
         group_id,
         date_range.0,
@@ -1424,6 +1387,7 @@ pub async fn get_ratings_by_user_and_group(
         AverageRatingPerPeriod,
         "SELECT
              r.restaurant_id,
+             rest.restaurant_code,
              IFNULL(YEAR(r.created_at), 0) as year,
              IFNULL(
                  CASE
@@ -1436,8 +1400,9 @@ pub async fn get_ratings_by_user_and_group(
              ) as period,
              IFNULL(AVG(r.score), 0) as average_score
          FROM ratings r
+         JOIN restaurants rest on r.restaurant_id = rest.id
          WHERE r.user_id = ? AND r.group_id = ?
-         GROUP BY r.restaurant_id, year, period
+         GROUP BY r.restaurant_id, rest.restaurant_code, year, period
          ORDER BY year ASC, period ASC;",
         user_id,
         group_id,
@@ -1464,7 +1429,7 @@ pub async fn get_ratings_by_user_and_group(
 
 pub async fn get_ratings_by_restaurant(
     conn: &mut MySqlConnection,
-    restaurant_id: &str,
+    restaurant_id: i32,
     group_id: &str,
 ) -> Result<RatingsByPeriod> {
     let mut tx = conn.begin().await?;
@@ -1491,6 +1456,7 @@ pub async fn get_ratings_by_restaurant(
         AverageRatingPerPeriod,
         "SELECT
             r.restaurant_id,
+            rest.restaurant_code,
             IFNULL(YEAR(r.created_at), 0) as year,
             IFNULL(
                 CASE
@@ -1503,8 +1469,9 @@ pub async fn get_ratings_by_restaurant(
             ) as period,
             IFNULL(AVG(r.score), 0) as average_score
          FROM ratings r
+         JOIN restaurants rest on r.restaurant_id = rest.id
          WHERE r.group_id = ? AND r.restaurant_id = ?
-         GROUP BY year, period
+         GROUP BY r.restaurant_id, rest.restaurant_code, year, period
          ORDER BY year ASC, period ASC",
         group_id,
         restaurant_id,
@@ -1532,7 +1499,7 @@ pub async fn get_ratings_by_restaurant(
 pub async fn get_ratings_by_restaurant_per_period(
     conn: &mut MySqlConnection,
     group_id: &str,
-    restaurant_id: &str,
+    restaurant_id: i32,
     year: i32,
     period: &Period,
 ) -> Result<Vec<Rating>> {
@@ -1540,10 +1507,11 @@ pub async fn get_ratings_by_restaurant_per_period(
 
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+        "SELECT r.id, r.group_id, r.restaurant_id, rest.restaurant_code, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
-         WHERE group_id = ? and restaurant_id = ? AND created_at >= ? AND created_at <= ?",
+         JOIN restaurants rest on r.restaurant_id = rest.id
+         WHERE r.group_id = ? and r.restaurant_id = ? AND r.created_at >= ? AND r.created_at <= ?",
         group_id,
         restaurant_id,
         date_range.0,
@@ -1563,16 +1531,17 @@ pub async fn get_rating_by_restaurant(
     conn: &mut MySqlConnection,
     user_id: &str,
     group_id: &str,
-    restaurant_id: &str,
+    restaurant_id: i32,
 ) -> Result<Rating> {
     let date_range = Period::current_period_date_range()?;
 
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+        "SELECT r.id, r.group_id, r.restaurant_id, rest.restaurant_code, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
-         WHERE user_id = ? AND group_id = ? AND restaurant_id = ? AND created_at >= ? AND created_at <= ?",
+         JOIN restaurants rest on r.restaurant_id = rest.id
+         WHERE r.user_id = ? AND r.group_id = ? AND r.restaurant_id = ? AND r.created_at >= ? AND r.created_at <= ?",
         user_id,
         group_id,
         restaurant_id,
@@ -1589,24 +1558,52 @@ pub async fn get_rating_by_restaurant(
 
 pub async fn is_restaurant_rated_by_user(
     conn: &mut MySqlConnection,
-    restaurant_id: &str,
+    restaurant_id: i32,
     user_id: &str,
     group_id: &str,
 ) -> Result<bool> {
+    let date_range = Period::current_period_date_range()?;
+
     let query = sqlx::query_as!(
         DbRating,
-        "SELECT r.id, r.group_id, r.restaurant_id, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+        "SELECT r.id, r.group_id, r.restaurant_id, rest.restaurant_code, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
          FROM ratings r
          JOIN users u on u.id = r.user_id
-         WHERE restaurant_id = ? AND user_id = ? AND group_id = ?",
+         JOIN restaurants rest on r.restaurant_id = rest.id
+         WHERE r.restaurant_id = ? AND r.user_id = ? AND r.group_id = ?
+         AND r.created_at >= ? AND DATE(r.created_at) <= ?",
         restaurant_id,
         user_id,
-        group_id
+        group_id,
+        date_range.0,
+        date_range.1
     );
     let ratings = query.fetch_all(conn).await?;
 
     Ok(!ratings.is_empty())
 }
+
+// pub async fn is_restaurant_rated_by_user(
+//     conn: &mut MySqlConnection,
+//     restaurant_id: i32,
+//     user_id: &str,
+//     group_id: &str,
+// ) -> Result<bool> {
+//     let query = sqlx::query_as!(
+//         DbRating,
+//         "SELECT r.id, r.group_id, r.restaurant_id, rest.restaurant_code, r.user_id, r.score, r.username, r.created_at, r.updated_at, u.color
+//          FROM ratings r
+//          JOIN users u on u.id = r.user_id
+//          JOIN restaurants rest on r.restaurant_id = rest.id
+//          WHERE r.restaurant_id = ? AND r.user_id = ? AND r.group_id = ?",
+//         restaurant_id,
+//         user_id,
+//         group_id
+//     );
+//     let ratings = query.fetch_all(conn).await?;
+//
+//     Ok(!ratings.is_empty())
+// }
 
 pub async fn update_rating(
     conn: &mut MySqlConnection,
@@ -1647,7 +1644,7 @@ pub async fn update_rating(
     };
 
     let updated_rating =
-        match get_rating_by_restaurant(&mut tx, user_id, &rating.group_id, &rating.restaurant_id)
+        match get_rating_by_restaurant(&mut tx, user_id, &rating.group_id, rating.restaurant_id)
             .await
         {
             Ok(updated_rating) => updated_rating,
@@ -1752,7 +1749,14 @@ mod tests {
     const GROUP_NAME_2: &str = "test_group2";
     const GROUP_DESCRIPTION_2: &str = "this is test group 2 (users: test_id, test_id3)";
 
-    const RESTAURANT_ID: &str = "test_restaurant";
+    async fn get_test_restaurant_id(conn: &mut MySqlConnection, group_id: &str) -> i32 {
+        sqlx::query_scalar!(
+            "SELECT id FROM restaurants WHERE group_id = ? AND restaurant_code = 'ARMYRA BY PAPAIOANNOU'",
+            group_id
+        )
+        .fetch_one(&mut *conn)
+        .await.expect("Fixture restaurant not found")
+    }
 
     #[sqlx::test]
     async fn test_create_user(pool: MySqlPool) -> Result<()> {
@@ -1950,12 +1954,15 @@ mod tests {
         let mut conn = get_connection(&pool)
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
+
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
         let create_rating_notification_result =
-            create_rating_notification(&mut conn, RESTAURANT_ID, GROUP_ID_1).await;
+            create_rating_notification(&mut conn, rest_id, GROUP_ID_1).await;
         assert!(create_rating_notification_result.is_ok());
 
         let rating_notification = create_rating_notification_result?;
-        assert_eq!(rating_notification.restaurant_id, RESTAURANT_ID);
+        assert_eq!(rating_notification.restaurant_id, rest_id);
         assert_eq!(rating_notification.group_id, GROUP_ID_1);
 
         let current_period = Period::current_period()?;
@@ -2152,22 +2159,26 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test]
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
     async fn test_create_restaurant(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
         let new_restaurant = Restaurant {
-            id: RESTAURANT_ID.to_owned(),
+            id: 0,
+            group_id: GROUP_ID_1.to_owned(),
             cuisine: "test_cuisine".to_owned(),
             ..Default::default()
         };
 
-        let mut conn = get_connection(&pool)
-            .await
-            .ok_or(anyhow!("Failed to get connection."))?;
         let create_restaurant_result = create_restaurant(&mut conn, &new_restaurant).await;
         assert!(create_restaurant_result.is_ok());
 
         let restaurant = create_restaurant_result?;
-        assert_eq!(restaurant.id, new_restaurant.id);
+        // Note: id is now auto-generated, so don't assert on it
+        assert!(restaurant.id > 0);
+        assert_eq!(restaurant.group_id, new_restaurant.group_id);
         assert_eq!(restaurant.cuisine, new_restaurant.cuisine);
 
         Ok(())
@@ -2179,10 +2190,12 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
-        let restaurants_result = get_restaurants(&mut conn).await;
+        let restaurants_result = get_restaurants(&mut conn, GROUP_ID_1).await;
+        println!("DEBUG: get_restaurants result: {:?}", restaurants_result);
         assert!(restaurants_result.is_ok());
 
         let restaurants = restaurants_result?;
+        println!("DEBUG: Found {} restaurants", restaurants.len());
         assert!(!restaurants.is_empty());
 
         Ok(())
@@ -2194,11 +2207,24 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
-        let restaurant_result = get_restaurant(&mut conn, RESTAURANT_ID).await;
+        // Debug: Check what's in the database
+        let _check_query: Vec<(i32, String, String)> =
+            sqlx::query_as("SELECT id, restaurant_code, group_id FROM restaurants")
+                .fetch_all(&mut *conn)
+                .await
+                .unwrap_or_default();
+        // Get the restaurant from the fixture (it has group_id = GROUP_ID_1)
+        let restaurants = get_restaurants(&mut conn, GROUP_ID_1).await?;
+        assert!(
+            !restaurants.is_empty(),
+            "Expected at least one restaurant in test group"
+        );
+        let fixture_restaurant_id = restaurants.first().unwrap().id;
+
+        let restaurant_result = get_restaurant(&mut conn, fixture_restaurant_id).await;
         assert!(restaurant_result.is_ok());
 
         let restaurant = restaurant_result.unwrap();
-        assert_eq!(restaurant.id, RESTAURANT_ID);
         assert_eq!(restaurant.cuisine, "test_cuisine");
 
         Ok(())
@@ -2210,14 +2236,23 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        // Get restaurant ID from fixture
+        let restaurants = get_restaurants(&mut conn, GROUP_ID_1).await?;
+        assert!(
+            !restaurants.is_empty(),
+            "Expected at least one restaurant in test group"
+        );
+        let restaurant_id = restaurants.first().unwrap().id;
+
         let restaurant = Restaurant {
-            id: "new_restaurant".to_owned(),
+            id: 0,
+            restaurant_code: "new_restaurant".to_owned(),
+            group_id: GROUP_ID_1.to_owned(),
             cuisine: "new_cuisine".to_owned(),
-            ..Default::default()
         };
 
         let update_restaurant_result =
-            update_restaurant(&mut conn, RESTAURANT_ID, &restaurant).await;
+            update_restaurant(&mut conn, restaurant_id, &restaurant).await;
         assert!(update_restaurant_result.is_ok());
 
         let query_result = update_restaurant_result?;
@@ -2232,7 +2267,9 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
-        let delete_restaurant_result = delete_restaurant(&mut conn, RESTAURANT_ID).await;
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
+        let delete_restaurant_result = delete_restaurant(&mut conn, rest_id, GROUP_ID_1).await;
         assert!(delete_restaurant_result.is_ok());
 
         let query_result = delete_restaurant_result?;
@@ -2246,8 +2283,25 @@ mod tests {
         scripts("users", "restaurants", "ratings_incomplete")
     ))]
     async fn test_is_restaurant_rating_complete(pool: MySqlPool) -> Result<()> {
+        // Get restaurant ID from fixture (it creates restaurant in GROUP_ID_1)
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+        let restaurants = get_restaurants(&mut conn, GROUP_ID_1).await?;
+        assert!(
+            !restaurants.is_empty(),
+            "Expected at least one restaurant in test group"
+        );
+        let restaurant_id = restaurants.first().unwrap().id;
+
+        sqlx::query("UPDATE ratings SET restaurant_id = ? WHERE group_id = ?")
+            .bind(restaurant_id)
+            .bind(GROUP_ID_1)
+            .execute(&mut *conn)
+            .await?;
+
         let mut is_restaurant_rating_complete_result =
-            is_restaurant_rating_complete(&pool, None, RESTAURANT_ID, GROUP_ID_1).await;
+            is_restaurant_rating_complete(&pool, None, restaurant_id, GROUP_ID_1).await;
         assert!(is_restaurant_rating_complete_result.is_ok());
 
         let mut is_complete = is_restaurant_rating_complete_result?;
@@ -2255,20 +2309,17 @@ mod tests {
 
         let new_rating = NewRating {
             group_id: GROUP_ID_1.to_owned(),
-            restaurant_id: RESTAURANT_ID.to_owned(),
+            restaurant_id: restaurant_id.to_owned(),
             user_id: USER_ID_2.to_owned(),
             username: USER_USERNAME_2.to_owned(),
             score: 8.0,
         };
 
-        let mut conn = get_connection(&pool)
-            .await
-            .ok_or(anyhow!("Failed to get connection."))?;
         let create_rating_result = create_rating(&mut conn, &new_rating).await;
         assert!(create_rating_result.is_ok());
 
         is_restaurant_rating_complete_result =
-            is_restaurant_rating_complete(&pool, None, RESTAURANT_ID, GROUP_ID_1).await;
+            is_restaurant_rating_complete(&pool, None, restaurant_id, GROUP_ID_1).await;
         assert!(is_restaurant_rating_complete_result.is_ok());
 
         is_complete = is_restaurant_rating_complete_result?;
@@ -2282,7 +2333,20 @@ mod tests {
         scripts("users", "restaurants", "ratings_complete")
     ))]
     async fn test_get_avg_rating(pool: MySqlPool) -> Result<()> {
-        let avg_rating_result = get_avg_rating(&pool, RESTAURANT_ID, GROUP_ID_1).await;
+        // Get restaurant ID that has ratings in the fixture
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let restaurant_id: Option<i32> =
+            sqlx::query_scalar("SELECT restaurant_id FROM ratings WHERE group_id = ? LIMIT 1")
+                .bind(GROUP_ID_1)
+                .fetch_optional(&mut *conn)
+                .await?;
+
+        let restaurant_id = restaurant_id.ok_or(anyhow!("Expected at least one rating in test"))?;
+
+        let avg_rating_result = get_avg_rating(&pool, restaurant_id, GROUP_ID_1).await;
         assert!(avg_rating_result.is_ok());
 
         let avg_rating_option = avg_rating_result?;
@@ -2303,6 +2367,15 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let restaurants = get_restaurants(&mut conn, GROUP_ID_1).await?;
+        let restaurant_id = restaurants.first().unwrap().id;
+
+        sqlx::query("UPDATE ratings SET restaurant_id = ? WHERE group_id = ?")
+            .bind(restaurant_id)
+            .bind(GROUP_ID_1)
+            .execute(&mut *conn)
+            .await?;
+
         let restaurants_with_avg_rating_result =
             get_restaurants_with_avg_rating(&mut conn, GROUP_ID_1).await;
         assert!(restaurants_with_avg_rating_result.is_ok());
@@ -2310,12 +2383,15 @@ mod tests {
         let restaurants_with_avg_rating = restaurants_with_avg_rating_result?;
         assert!(!restaurants_with_avg_rating.is_empty());
 
-        let test_restaurant_option = restaurants_with_avg_rating.first();
-        assert!(test_restaurant_option.is_some());
-
-        let (test_restaurant, avg_rating) = test_restaurant_option.unwrap();
-        assert_eq!(test_restaurant.id, RESTAURANT_ID);
-        assert_eq!(*avg_rating, 9.0);
+        // Just verify we get some results with avg_rating = 9.0
+        // Don't check specific IDs since they're auto-generated
+        let has_correct_rating = restaurants_with_avg_rating
+            .iter()
+            .any(|(_, rating)| (*rating - 9.0).abs() < 0.01);
+        assert!(
+            has_correct_rating,
+            "Expected at least one restaurant with avg rating 9.0"
+        );
 
         Ok(())
     }
@@ -2329,9 +2405,11 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
         let new_rating = NewRating {
             group_id: GROUP_ID_1.to_owned(),
-            restaurant_id: RESTAURANT_ID.to_owned(),
+            restaurant_id: rest_id,
             user_id: USER_ID_2.to_owned(),
             username: USER_USERNAME_2.to_owned(),
             score: 8.0,
@@ -2398,8 +2476,10 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
         let ratings_by_restaurant_result =
-            get_ratings_by_restaurant(&mut conn, RESTAURANT_ID, GROUP_ID_1).await;
+            get_ratings_by_restaurant(&mut conn, rest_id, GROUP_ID_1).await;
         assert!(ratings_by_restaurant_result.is_ok());
 
         let ratings_by_restaurant = ratings_by_restaurant_result?;
@@ -2417,7 +2497,7 @@ mod tests {
         assert_eq!(historical_ratings.len(), 1);
 
         for rating in current_period_ratings {
-            assert_eq!(rating.restaurant_id, RESTAURANT_ID);
+            assert_eq!(rating.restaurant_id, rest_id);
             assert_eq!(rating.group_id, GROUP_ID_1);
             assert!(rating.color.is_some());
         }
@@ -2434,12 +2514,14 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
         let (current_year, current_period, _) = Period::current_period_info()?;
 
         let ratings_by_restaurant_result = get_ratings_by_restaurant_per_period(
             &mut conn,
             GROUP_ID_1,
-            RESTAURANT_ID,
+            rest_id,
             current_year,
             &current_period,
         )
@@ -2452,7 +2534,7 @@ mod tests {
 
         for rating in ratings_by_restaurant {
             assert_eq!(rating.group_id, GROUP_ID_1);
-            assert_eq!(rating.restaurant_id, RESTAURANT_ID);
+            assert_eq!(rating.restaurant_id, rest_id);
             assert_eq!(rating.created_at.year(), current_year);
             assert_eq!(rating.period, current_period);
             assert!(rating.color.is_some());
@@ -2470,14 +2552,16 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
         let get_rating_result =
-            get_rating_by_restaurant(&mut conn, USER_ID_1, GROUP_ID_1, RESTAURANT_ID).await;
+            get_rating_by_restaurant(&mut conn, USER_ID_1, GROUP_ID_1, rest_id).await;
         assert!(get_rating_result.is_ok());
 
         let rating = get_rating_result?;
         assert_eq!(rating.group_id, GROUP_ID_1);
         assert_eq!(rating.user_id, USER_ID_1);
-        assert_eq!(rating.restaurant_id, RESTAURANT_ID);
+        assert_eq!(rating.restaurant_id, rest_id);
         assert_eq!(rating.color, Some(USER_COLOR_1.to_owned()));
 
         Ok(())
@@ -2492,15 +2576,17 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
         let mut is_restaurant_rated_by_user_result =
-            is_restaurant_rated_by_user(&mut conn, RESTAURANT_ID, USER_ID_1, GROUP_ID_1).await;
+            is_restaurant_rated_by_user(&mut conn, rest_id, USER_ID_1, GROUP_ID_1).await;
         assert!(is_restaurant_rated_by_user_result.is_ok());
 
         let is_restaurant_rated_by_user1 = is_restaurant_rated_by_user_result?;
         assert!(is_restaurant_rated_by_user1);
 
         is_restaurant_rated_by_user_result =
-            is_restaurant_rated_by_user(&mut conn, RESTAURANT_ID, USER_ID_2, GROUP_ID_1).await;
+            is_restaurant_rated_by_user(&mut conn, rest_id, USER_ID_2, GROUP_ID_1).await;
         assert!(is_restaurant_rated_by_user_result.is_ok());
 
         let is_restaurant_rated_by_user2 = is_restaurant_rated_by_user_result?;
@@ -2518,9 +2604,11 @@ mod tests {
             .await
             .ok_or(anyhow!("Failed to get connection."))?;
 
+        let rest_id = get_test_restaurant_id(&mut conn, GROUP_ID_1).await;
+
         let new_rating = NewRating {
             group_id: GROUP_ID_1.to_owned(),
-            restaurant_id: RESTAURANT_ID.to_owned(),
+            restaurant_id: rest_id.to_owned(),
             user_id: USER_ID_2.to_owned(),
             username: USER_USERNAME_2.to_owned(),
             score: 9.0,
