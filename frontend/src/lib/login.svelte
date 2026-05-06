@@ -1,10 +1,16 @@
 <script lang="ts">
   import { createEventDispatcher, onMount } from 'svelte';
   import { user } from './store';
-  import { LOGIN_ENDPOINT, REGISTER_ENDPOINT } from './endpoints';
+  import {
+    LOGIN_ENDPOINT,
+    REGISTER_ENDPOINT,
+    OIDC_LOGIN_ENDPOINT,
+    OIDC_PROVIDER_NAME,
+    OIDC_PROVIDER_ICON_URL
+  } from './endpoints';
   import Loading from './loading.svelte';
   import axios from 'axios';
-  import { setTokenCookie, readTokenCookie, deleteCookies, setUserCookies } from './auth';
+  import { readTokenCookie, deleteCookies, setUserCookies } from './auth';
   import Groups from './groups.svelte';
   import ColorPicker from 'svelte-awesome-color-picker';
 
@@ -114,6 +120,10 @@
     fieldValidationError = false;
     passwordsMatchError = false;
   }
+
+  async function oidcLogin() {
+    window.location.href = OIDC_LOGIN_ENDPOINT;
+  }
 </script>
 
 {#if checkingAuth}
@@ -204,6 +214,29 @@
           Don't have an account? Register
         {/if}
       </a>
+    {/if}
+
+    {#if !registration}
+      <div class="mt-4 pt-4 border-t border-gray-600">
+        <!-- <p class="text-center text-gray-400 mb-2">Or continue with</p> -->
+        <button
+          type="button"
+          class="btn btn-lg variant-filled-surface w-full"
+          on:click={oidcLogin}
+          disabled={loginLoading}
+        >
+          {#if OIDC_PROVIDER_ICON_URL}
+            <img
+              class="mr-2"
+              width="28"
+              height="28"
+              src={OIDC_PROVIDER_ICON_URL}
+              alt={OIDC_PROVIDER_NAME}
+            />
+          {/if}
+          Login with {OIDC_PROVIDER_NAME}
+        </button>
+      </div>
     {/if}
   </form>
 {/if}

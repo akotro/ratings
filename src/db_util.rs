@@ -1,10 +1,9 @@
 #![allow(dead_code)]
 
-use std::{env, str::FromStr};
+use std::str::FromStr;
 
 use anyhow::{anyhow, Error, Result};
 use chrono::Utc;
-use dotenvy::dotenv;
 use serde_json::json;
 use sqlx::{
     migrate,
@@ -29,12 +28,9 @@ const VAPID_PRIVATE_KEY: &str = "VAPID_PRIVATE_KEY";
 
 static MIGRATOR: Migrator = migrate!();
 
-pub async fn init_database() -> Result<MySqlPool, Error> {
-    dotenv().ok();
-    let database_url = env::var(DB_URL).expect("DATABASE_URL must be set");
-
+pub async fn init_database(database_url: &str) -> Result<MySqlPool, Error> {
     let connect_options =
-        MySqlConnectOptions::from_str(&database_url)?.log_statements(log::LevelFilter::max());
+        MySqlConnectOptions::from_str(database_url)?.log_statements(log::LevelFilter::max());
     let pool = MySqlPool::connect_with(connect_options).await?;
 
     MIGRATOR.run(&pool).await?;
@@ -170,6 +166,99 @@ pub async fn get_users(pool: &MySqlPool) -> Result<Vec<User>> {
     results
 }
 
+pub async fn get_user_by_oidc(
+    conn: &mut MySqlConnection,
+    provider: &str,
+    subject: &str,
+) -> Result<Option<User>> {
+    let result = sqlx::query_as!(
+        DbUser,
+        r#"
+        SELECT u.id, u.username, u.password, u.color
+        FROM users u
+        INNER JOIN oidc_links o ON u.id = o.user_id
+        WHERE o.provider = ? AND o.subject = ?
+        "#,
+        provider,
+        subject
+    )
+    .fetch_optional(conn)
+    .await?;
+
+    if let Some(db_user) = result {
+        // Just return a partial User here, or full User if needed
+        let user = User {
+            id: db_user.id.clone(),
+            username: db_user.username.clone(),
+            password: db_user.password.clone(),
+            color: db_user.color.clone(),
+            ..Default::default()
+        };
+        Ok(Some(user))
+    } else {
+        Ok(None)
+    }
+}
+
+pub async fn get_oidc_links_for_user(
+    conn: &mut MySqlConnection,
+    user_id: &str,
+) -> Result<Vec<OidcLink>> {
+    let links = sqlx::query_as!(
+        DbOidcLink,
+        r#"SELECT id, user_id, provider, subject, created_at as "created_at: chrono::NaiveDateTime" FROM oidc_links WHERE user_id = ?"#,
+        user_id
+    )
+    .fetch_all(conn)
+    .await?;
+    Ok(links
+        .into_iter()
+        .map(|db_link| OidcLink::from_db(&db_link))
+        .collect())
+}
+
+pub async fn unlink_oidc(conn: &mut MySqlConnection, user_id: &str, provider: &str) -> Result<()> {
+    sqlx::query!(
+        r#"DELETE FROM oidc_links WHERE user_id = ? AND provider = ?"#,
+        user_id,
+        provider
+    )
+    .execute(conn)
+    .await?;
+    Ok(())
+}
+
+pub async fn link_oidc_to_user(
+    conn: &mut MySqlConnection,
+    user_id: &str,
+    provider: &str,
+    subject: &str,
+) -> Result<OidcLink> {
+    let id = Uuid::new_v4().to_string();
+    sqlx::query!(
+        r#"
+        INSERT INTO oidc_links (id, user_id, provider, subject)
+        VALUES (?, ?, ?, ?)
+        "#,
+        id,
+        user_id,
+        provider,
+        subject
+    )
+    .execute(&mut *conn)
+    .await?;
+
+    let oidc_link = sqlx::query_as!(
+        DbOidcLink,
+        r#"SELECT id, user_id, provider, subject, created_at as "created_at: chrono::NaiveDateTime" FROM oidc_links WHERE id = ?"#,
+        id
+    )
+    .fetch_one(conn)
+    .await?;
+
+    Ok(OidcLink::from_db(&oidc_link))
+}
+
 pub async fn get_user_by_credentials(
     conn: &mut MySqlConnection,
     username: &str,
@@ -290,12 +379,10 @@ pub async fn delete_user(conn: &mut MySqlConnection, user_id: &str) -> Result<My
 
 // NOTE: Push Notifications
 
-pub fn init_push_notifications() -> Result<PushClient, Error> {
-    dotenv().ok();
-    let vapid_public_key =
-        env::var(PUBLIC_VAPID_PUBLIC_KEY).expect("PUBLIC_VAPID_PUBLIC_KEY must be set");
-    let vapid_private_key = env::var(VAPID_PRIVATE_KEY).expect("VAPID_PRIVATE_KEY must be set");
-
+pub fn init_push_notifications(
+    vapid_public_key: String,
+    vapid_private_key: String,
+) -> Result<PushClient, Error> {
     let client = IsahcWebPushClient::new()?;
 
     Ok(PushClient {
@@ -1065,7 +1152,9 @@ pub async fn is_restaurant_rating_complete(
                     )
                     .await
                     {
-                        eprintln!("ERROR: Failed to send notification to group {group_id} for restaurant {restaurant_id}: {err}");
+                        eprintln!(
+                            "ERROR: Failed to send notification to group {group_id} for restaurant {restaurant_id}: {err}"
+                        );
                     }
                 });
             } else {
@@ -1806,6 +1895,61 @@ mod tests {
             .group_memberships
             .iter()
             .all(|gm| gm.role == Role::Admin));
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_get_user_by_oidc(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let _link = link_oidc_to_user(&mut conn, USER_ID_1, "oidc-provider", "12345").await?;
+
+        let user = get_user_by_oidc(&mut conn, "oidc-provider", "12345").await?;
+        assert!(user.is_some());
+        assert_eq!(user.unwrap().id, USER_ID_1);
+
+        let missing = get_user_by_oidc(&mut conn, "oidc-provider", "missing").await?;
+        assert!(missing.is_none());
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_get_oidc_links_for_user(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let _link1 = link_oidc_to_user(&mut conn, USER_ID_1, "provider-1", "subject-1").await?;
+        let _link2 = link_oidc_to_user(&mut conn, USER_ID_1, "provider-2", "subject-2").await?;
+
+        let links = get_oidc_links_for_user(&mut conn, USER_ID_1).await?;
+        assert_eq!(links.len(), 2);
+
+        let links2 = get_oidc_links_for_user(&mut conn, USER_ID_2).await?;
+        assert!(links2.is_empty());
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_unlink_oidc(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let _link = link_oidc_to_user(&mut conn, USER_ID_1, "provider-1", "subject-1").await?;
+
+        let links_before = get_oidc_links_for_user(&mut conn, USER_ID_1).await?;
+        assert_eq!(links_before.len(), 1);
+
+        unlink_oidc(&mut conn, USER_ID_1, "provider-1").await?;
+
+        let links_after = get_oidc_links_for_user(&mut conn, USER_ID_1).await?;
+        assert!(links_after.is_empty());
 
         Ok(())
     }

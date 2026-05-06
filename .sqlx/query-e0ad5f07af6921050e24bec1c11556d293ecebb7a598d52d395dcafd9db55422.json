@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "\n        INSERT INTO oidc_links (id, user_id, provider, subject)\n        VALUES (?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e0ad5f07af6921050e24bec1c11556d293ecebb7a598d52d395dcafd9db55422"
+}

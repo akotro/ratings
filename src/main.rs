@@ -7,23 +7,31 @@ use actix_web::{
 use dotenvy::dotenv;
 use env_logger::Env;
 use ratings_lib::auth;
+use ratings_lib::config::AppConfig;
 use ratings_lib::db_util;
 use ratings_lib::middleware::{configure_cors, configure_governor, json_error_handler};
 use ratings_lib::routes::*;
-use std::{
-    env,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
     env_logger::init_from_env(Env::default().default_filter_or("debug"));
 
     dotenv().ok();
-    let secret_key = Data::new(env::var(auth::JWT_SECRET).expect("JWT_SECRET must be set"));
 
-    let db_pool = db_util::init_database().await?;
-    let push_client = db_util::init_push_notifications()?;
+    let app_config = AppConfig::load().expect("Failed to load configuration from environment");
+
+    let secret_key = Data::new(app_config.jwt_secret.clone());
+
+    let db_pool = db_util::init_database(&app_config.database_url).await?;
+    let push_client = db_util::init_push_notifications(
+        app_config.vapid_public_key.clone(),
+        app_config.vapid_private_key.clone(),
+    )?;
+
+    let oidc_config = ratings_lib::oidc::build_oidc_config(&app_config)
+        .await
+        .expect("Failed to initialize OIDC config");
 
     let governor_conf = configure_governor();
 
@@ -46,8 +54,11 @@ async fn main() -> anyhow::Result<()> {
                     .app_data(Data::new(push_client.clone()))
                     .app_data(Data::new(ip_blacklist.clone()))
                     .app_data(secret_key.clone())
+                    .app_data(Data::new(oidc_config.clone()))
                     .app_data(web::JsonConfig::default().error_handler(json_error_handler))
                     .service(get_users_route)
+                    .service(get_user_oidc_links_route)
+                    .service(unlink_oidc_route)
                     .service(update_user_route)
                     .service(delete_user_route)
                     .service(create_group_route)
@@ -70,7 +81,16 @@ async fn main() -> anyhow::Result<()> {
                     .service(
                         web::scope("auth")
                             .service(register_user_route)
-                            .service(login_user_route),
+                            .service(login_user_route)
+                            .route("/oidc/login", web::get().to(ratings_lib::oidc::oidc_login))
+                            .route(
+                                "/oidc/callback",
+                                web::get().to(ratings_lib::oidc::oidc_callback),
+                            )
+                            .route(
+                                "/oidc/link",
+                                web::post().to(ratings_lib::oidc::link_oidc_account),
+                            ),
                     )
                     .service(web::scope("push").service(push_subscribe_route))
                     .default_service(web::route().to(HttpResponse::NotFound)),

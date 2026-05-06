@@ -1,5 +1,6 @@
 backend-build:
     cargo build
+    cargo sqlx prepare
 
 backend-run:
     cargo run

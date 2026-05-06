@@ -178,6 +178,8 @@
                 pkgs.typescript-language-server
                 pkgs.vtsls
 
+                pkgs.treefmt
+                pkgs.taplo
               ];
 
               env = {

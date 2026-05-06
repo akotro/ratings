@@ -1243,3 +1243,125 @@ async fn test_no_auth(pool: MySqlPool) {
     let resp = test::call_service(&app, req).await;
     assert_eq!(resp.status(), 401, "should return 401 without auth");
 }
+
+// ── OIDC ───────────────────────────────────────────────────────────
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_get_oidc_links_empty(pool: MySqlPool) {
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool.clone()))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(get_user_oidc_links_route),
+    )
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri("/users/test_id/oidc-links")
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id", "test_username")),
+        ))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200, "should return 200 for valid auth");
+
+    let body = test::read_body(resp).await;
+    let api_response: ApiResponse<Vec<OidcLink>> = serde_json::from_slice(&body).unwrap();
+    assert!(api_response.success, "should have success=true");
+    assert!(
+        api_response.data.unwrap().is_empty(),
+        "should have no links"
+    );
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users", "oidc_links")))]
+async fn test_get_oidc_links_with_data(pool: MySqlPool) {
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool.clone()))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(get_user_oidc_links_route),
+    )
+    .await;
+
+    let req = test::TestRequest::get()
+        .uri("/users/test_id/oidc-links")
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id", "test_username")),
+        ))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 200, "should return 200");
+
+    let body = test::read_body(resp).await;
+    let api_response: ApiResponse<Vec<OidcLink>> = serde_json::from_slice(&body).unwrap();
+    assert!(api_response.success);
+    let links = api_response.data.unwrap();
+    assert!(!links.is_empty(), "should have at least one link");
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_get_oidc_links_unauthorized(pool: MySqlPool) {
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool.clone()))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(get_user_oidc_links_route),
+    )
+    .await;
+
+    // Try to access another user's links
+    let req = test::TestRequest::get()
+        .uri("/users/test_id2/oidc-links")
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id", "test_username1")),
+        ))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        403,
+        "should return 403 when accessing another user's links"
+    );
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_unlink_oidc_not_found(pool: MySqlPool) {
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool.clone()))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(unlink_oidc_route),
+    )
+    .await;
+
+    // Try to unlink non-existent link
+    let req = test::TestRequest::delete()
+        .uri("/users/test_id/oidc-links/https%3A%2F%2Fexample.com")
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id", "test_username")),
+        ))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        resp.status(),
+        200,
+        "should return 200 even for non-existent link"
+    );
+}

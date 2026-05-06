@@ -1,0 +1,29 @@
+[formatter.nixfmt]
+command = "nixfmt"
+options = ["--"]
+includes = ["*.nix"]
+
+[formatter.toml]
+command = "taplo"
+options = ["format", "--"]
+includes = ["*.toml"]
+
+[formatter.rustfmt]
+command = "cargo"
+options = ["fmt", "--"]
+includes = ["**/*.rs"]
+excludes = ["target/**"]
+
+[formatter.prettier]
+command = "./frontend/node_modules/.bin/prettier"
+options = [
+  "--plugin",
+  "./frontend/node_modules/prettier-plugin-svelte/plugin.js",
+  "--write",
+]
+includes = [
+  "frontend/**/*.svelte",
+  "frontend/**/*.ts",
+  "frontend/**/*.js",
+  "frontend/**/*.css",
+]

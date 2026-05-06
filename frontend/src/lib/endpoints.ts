@@ -6,6 +6,12 @@ export const VAPID_PUBLIC_KEY = env.PUBLIC_VAPID_PUBLIC_KEY;
 export const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
 export const REGISTER_ENDPOINT = `${API_BASE_URL}/auth/register`;
 
+export const OIDC_PROVIDER_NAME = env.PUBLIC_OIDC_PROVIDER_NAME;
+export const OIDC_PROVIDER_ICON_URL: string | undefined = env.PUBLIC_OIDC_PROVIDER_ICON_URL;
+export const OIDC_LOGIN_ENDPOINT = `${API_BASE_URL}/auth/oidc/login`;
+export const OIDC_CALLBACK_ENDPOINT = `${API_BASE_URL}/auth/oidc/callback`;
+export const OIDC_LINK_ENDPOINT = `${API_BASE_URL}/auth/oidc/link`;
+
 export function UPDATE_USER_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/users/${userId}`;
 }
@@ -44,6 +50,12 @@ export function GET_RATING_ENDPOINT(userId: string, restaurantId: number, groupI
 }
 export function GET_RATINGS_ENDPOINT(userId: string, groupId: string) {
   return `${API_BASE_URL}/users/${userId}/ratings?group_id=${groupId}`;
+}
+export function GET_USER_OIDC_LINKS_ENDPOINT(userId: string) {
+  return `${API_BASE_URL}/users/${userId}/oidc-links`;
+}
+export function UNLINK_OIDC_ENDPOINT(userId: string) {
+  return `${API_BASE_URL}/users/${userId}/oidc-links/${encodeURIComponent(OIDC_PROVIDER_NAME)}`;
 }
 export function RATE_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/users/${userId}/ratings`;

@@ -319,6 +319,27 @@ pub struct Ip {
     pub ip_address: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OidcLink {
+    pub id: String,
+    pub user_id: String,
+    pub provider: String,
+    pub subject: String,
+    pub created_at: Option<NaiveDateTime>,
+}
+
+impl OidcLink {
+    pub fn from_db(db_link: &crate::db_models::DbOidcLink) -> Self {
+        Self {
+            id: db_link.id.clone(),
+            user_id: db_link.user_id.clone(),
+            provider: db_link.provider.clone(),
+            subject: db_link.subject.clone(),
+            created_at: db_link.created_at,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiResponse<T> {
     pub success: bool,
@@ -340,6 +361,14 @@ impl<T> ApiResponse<T> {
             success: false,
             message,
             data: None,
+        }
+    }
+
+    pub fn error_with_data<U: serde::Serialize>(message: String, data: U) -> ApiResponse<U> {
+        ApiResponse {
+            success: false,
+            message,
+            data: Some(data),
         }
     }
 }

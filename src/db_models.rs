@@ -100,3 +100,12 @@ pub struct DbIp {
 pub struct NewIp<'a> {
     pub ip_address: &'a str,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DbOidcLink {
+    pub id: String,
+    pub user_id: String,
+    pub provider: String,
+    pub subject: String,
+    pub created_at: Option<NaiveDateTime>,
+}

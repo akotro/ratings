@@ -23,7 +23,7 @@ async fn register_user_route(
         Ok(password) => password,
         Err(error) => {
             return HttpResponse::InternalServerError()
-                .json(ApiResponse::<()>::error(error.to_string()))
+                .json(ApiResponse::<()>::error(error.to_string()));
         }
     };
     new_user.0.password = hashed_password;
@@ -105,6 +105,66 @@ async fn get_users_route(pool: web::Data<MySqlPool>, req: HttpRequest) -> HttpRe
         Err(error) => {
             HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
         }
+    }
+}
+
+#[get("/users/{user_id}/oidc-links")]
+async fn get_user_oidc_links_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    path: web::Path<String>,
+) -> HttpResponse {
+    if let Err(err) = auth::validate_ip(&req) {
+        return err;
+    }
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+    let user_id = path.into_inner();
+    if user_claims.id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error("Unauthorized".into()));
+    }
+    let mut conn = match db_util::get_connection(&pool).await {
+        Some(conn) => conn,
+        None => {
+            return HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("DB Error".into()));
+        }
+    };
+    match db_util::get_oidc_links_for_user(&mut conn, &user_id).await {
+        Ok(links) => HttpResponse::Ok().json(ApiResponse::success(links)),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())),
+    }
+}
+
+#[delete("/users/{user_id}/oidc-links/{provider}")]
+async fn unlink_oidc_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    path: web::Path<(String, String)>,
+) -> HttpResponse {
+    if let Err(err) = auth::validate_ip(&req) {
+        return err;
+    }
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+    let (user_id, provider) = path.into_inner();
+    if user_claims.id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error("Unauthorized".into()));
+    }
+    let mut conn = match db_util::get_connection(&pool).await {
+        Some(conn) => conn,
+        None => {
+            return HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("DB Error".into()));
+        }
+    };
+    match db_util::unlink_oidc(&mut conn, &user_id, &provider).await {
+        Ok(_) => HttpResponse::Ok().json(ApiResponse::success(true)),
+        Err(e) => HttpResponse::InternalServerError().json(ApiResponse::<()>::error(e.to_string())),
     }
 }
 
@@ -364,7 +424,7 @@ async fn get_restaurants_route(
         Some(group_id) => group_id,
         None => {
             return HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("group_id is missing".to_string()))
+                .json(ApiResponse::<()>::error("group_id is missing".to_string()));
         }
     };
 
@@ -433,7 +493,7 @@ async fn get_restaurants_with_avg_rating_route(
         None => {
             return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                 "group_id was not provided".to_string(),
-            ))
+            ));
         }
     };
 
@@ -470,7 +530,7 @@ async fn get_restaurant_ratings_route(
         None => {
             return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                 "group_id was not provided".to_string(),
-            ))
+            ));
         }
     };
 
@@ -506,7 +566,7 @@ async fn get_restaurant_ratings_per_period_route(
         None => {
             return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                 "group_id was not provided".to_string(),
-            ))
+            ));
         }
     };
 
@@ -549,7 +609,7 @@ async fn is_restaurant_rating_complete_route(
         None => {
             return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                 "group_id was not provided".to_string(),
-            ))
+            ));
         }
     };
 
@@ -588,7 +648,7 @@ async fn delete_restaurant_route(
         Some(group_id) => group_id,
         None => {
             return HttpResponse::BadRequest()
-                .json(ApiResponse::<()>::error("group_id is missing".to_string()))
+                .json(ApiResponse::<()>::error("group_id is missing".to_string()));
         }
     };
 
@@ -713,7 +773,7 @@ async fn get_ratings_by_user_and_group_route(
         None => {
             return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                 "group_id was not provided".to_string(),
-            ))
+            ));
         }
     };
 
@@ -749,7 +809,7 @@ async fn get_rating_route(
         None => {
             return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                 "group_id was not provided".to_string(),
-            ))
+            ));
         }
     };
 
@@ -812,7 +872,7 @@ async fn delete_rating_route(
         None => {
             return HttpResponse::InternalServerError().json(ApiResponse::<()>::error(
                 "group_id was not provided".to_string(),
-            ))
+            ));
         }
     };
 

@@ -216,7 +216,7 @@
             {/if}
           </div>
         {:else}
-          <p>You are not currently in any groups. Create or join one.</p>
+          <p class="text-center px-4">You are not currently in any groups. Create or join one.</p>
         {/if}
       {/await}
 

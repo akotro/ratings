@@ -2,98 +2,64 @@ import { jwtDecode } from 'jwt-decode';
 import type { GroupMembership, User } from './models';
 import { NOTIFICATION_TOAST_DISMISSED } from './notifications';
 
+function getCookieValue(name: string): string | null {
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  if (match) return decodeURIComponent(match[2]);
+  return null;
+}
+
+function eraseCookie(name: string) {
+  document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
+}
+
 export function setUserCookies(token: string, color: string) {
   setTokenCookie(token);
   setColorCookie(color);
 }
 
 export function setTokenCookie(value: string) {
-  document.cookie = `token=${value}; path=/`;
-}
-
-export function readTokenCookie(): string | null {
-  const name = 'token=';
-  const decodedCookie = decodeURIComponent(document.cookie);
-  const cookieArray = decodedCookie.split(';');
-  for (let i = 0; i < cookieArray.length; i++) {
-    let cookie = cookieArray[i];
-    while (cookie.charAt(0) === ' ') {
-      cookie = cookie.substring(1);
-    }
-    if (cookie.indexOf(name) === 0) {
-      return cookie.substring(name.length, cookie.length);
-    }
-  }
-  return null;
-}
-
-export function deleteTokenCookie() {
-  document.cookie = 'token=; path=/;';
+  document.cookie = `token=${encodeURIComponent(value)}; path=/`;
 }
 
 export function setColorCookie(color: string) {
-  document.cookie = `color=${color}; path=/`;
-}
-
-export function readColorCookie(): string {
-  const name = 'color=';
-  const decodedCookie = decodeURIComponent(document.cookie);
-  const cookieArray = decodedCookie.split(';');
-  for (let i = 0; i < cookieArray.length; i++) {
-    let cookie = cookieArray[i];
-    while (cookie.charAt(0) === ' ') {
-      cookie = cookie.substring(1);
-    }
-    if (cookie.indexOf(name) === 0) {
-      const colorString = cookie.substring(name.length, cookie.length);
-      if (!colorString) {
-        return '';
-      }
-
-      return colorString;
-    }
-  }
-
-  return '';
-}
-
-export function deleteColorCookie() {
-  document.cookie = 'color=; path=/;';
+  document.cookie = `color=${encodeURIComponent(color)}; path=/`;
 }
 
 export function setGroupCookie(group: GroupMembership) {
   const groupString = JSON.stringify(group);
-  document.cookie = `group=${groupString}; path=/`;
+  document.cookie = `group=${encodeURIComponent(groupString)}; path=/`;
+}
+
+export function readTokenCookie(): string | null {
+  return getCookieValue('token');
+}
+
+export function readColorCookie(): string {
+  return getCookieValue('color') || '';
 }
 
 export function readGroupCookie(): GroupMembership | null {
-  const name = 'group=';
-  const decodedCookie = decodeURIComponent(document.cookie);
-  const cookieArray = decodedCookie.split(';');
-  for (let i = 0; i < cookieArray.length; i++) {
-    let cookie = cookieArray[i];
-    while (cookie.charAt(0) === ' ') {
-      cookie = cookie.substring(1);
-    }
-    if (cookie.indexOf(name) === 0) {
-      const groupString = cookie.substring(name.length, cookie.length);
-      if (!groupString) {
-        return null;
-      }
+  const groupString = getCookieValue('group');
+  if (!groupString) return null;
 
-      try {
-        return JSON.parse(groupString) as GroupMembership;
-      } catch (e) {
-        console.error('Error parsing group cookie:', e);
-        return null;
-      }
-    }
+  try {
+    return JSON.parse(groupString) as GroupMembership;
+  } catch (e) {
+    console.error('Error parsing group cookie:', e);
+    return null;
   }
-  return null;
+}
+
+export function deleteTokenCookie() {
+  eraseCookie('token');
+}
+
+export function deleteColorCookie() {
+  eraseCookie('color');
 }
 
 export function deleteGroupCookie() {
-  document.cookie = 'group=; path=/;';
+  eraseCookie('group');
 }
 
 export function deleteCookies() {
@@ -103,24 +69,29 @@ export function deleteCookies() {
   localStorage.setItem(NOTIFICATION_TOAST_DISMISSED, 'false');
 }
 
-export function getUserFromToken(token: string) {
-  const decodedToken = jwtDecode(token) as { id: string; username: number; exp: number };
-  if (decodedToken && decodedToken.exp > Date.now() / 1000) {
-    const userId: string = decodedToken.id;
-    const username: string = decodedToken.username.toLocaleString();
-    const color: string = readColorCookie();
-    const groupMembership: GroupMembership | null = readGroupCookie();
+export function getUserFromToken(token: string): User | null {
+  try {
+    const decodedToken = jwtDecode(token) as { id: string; username: string; exp: number };
 
-    return {
-      id: userId,
-      username: username,
-      password: '',
-      color: color,
-      token: token,
-      groupMembership: groupMembership
-    } as User;
-  } else {
-    deleteCookies();
-    return null;
+    if (decodedToken && decodedToken.exp > Date.now() / 1000) {
+      const userId: string = decodedToken.id;
+      const username: string = decodedToken.username;
+      const color: string = readColorCookie();
+      const groupMembership: GroupMembership | null = readGroupCookie();
+
+      return {
+        id: userId,
+        username: username,
+        password: '',
+        color: color,
+        token: token,
+        groupMembership: groupMembership
+      } as User;
+    }
+  } catch (e) {
+    console.error('Failed to decode token:', e);
   }
+
+  deleteCookies();
+  return null;
 }

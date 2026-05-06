@@ -1,0 +1,12 @@
+{
+  "db_name": "MySQL",
+  "query": "DELETE FROM oidc_links WHERE user_id = ? AND provider = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9ca3ba1018e21d919e0b47f17c1c44f2d284f32c71d5665b3ae113d32df7fba0"
+}
