@@ -60,7 +60,15 @@ pub async fn build_oidc_config(app_config: &AppConfig) -> anyhow::Result<OidcCon
     })
 }
 
-pub async fn oidc_login(oidc_config: web::Data<OidcConfig>) -> HttpResponse {
+#[derive(serde::Deserialize)]
+pub struct OidcLoginQuery {
+    redirect: Option<String>,
+}
+
+pub async fn oidc_login(
+    query: web::Query<OidcLoginQuery>,
+    oidc_config: web::Data<OidcConfig>,
+) -> HttpResponse {
     let client = &oidc_config.client;
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -100,11 +108,21 @@ pub async fn oidc_login(oidc_config: web::Data<OidcConfig>) -> HttpResponse {
         .max_age(cookie::time::Duration::minutes(15))
         .finish();
 
+    let redirect_cookie_str = query.redirect.clone().unwrap_or_default();
+    let redirect_cookie = cookie::Cookie::build("oidc_redirect", redirect_cookie_str)
+        .path("/")
+        .http_only(true)
+        .secure(true)
+        .same_site(cookie::SameSite::Lax)
+        .max_age(cookie::time::Duration::minutes(15))
+        .finish();
+
     HttpResponse::Found()
         .append_header(("Location", auth_url.to_string()))
         .cookie(state_cookie)
         .cookie(nonce_cookie)
         .cookie(pkce_cookie)
+        .cookie(redirect_cookie)
         .finish()
 }
 
@@ -156,6 +174,11 @@ pub async fn oidc_callback(
                 .finish();
         }
     };
+
+    let redirect_target = req
+        .cookie("oidc_redirect")
+        .map(|c| c.value().to_string())
+        .filter(|s| !s.is_empty());
 
     let code = AuthorizationCode::new(query.code.clone());
 
@@ -281,7 +304,11 @@ pub async fn oidc_callback(
 
     if let Some(user) = user_opt {
         let token = generate_token(&req, user.id.clone(), user.username.clone());
-        let frontend_url = format!("{}/login?oidc_success=true", oidc_config.frontend_base_url);
+
+        let mut frontend_url = format!("{}/login?oidc_success=true", oidc_config.frontend_base_url);
+        if let Some(rt) = &redirect_target {
+            frontend_url = format!("{}&redirect={}", frontend_url, encode(rt));
+        }
 
         return HttpResponse::Found()
             .append_header(("Location", frontend_url))
@@ -290,6 +317,7 @@ pub async fn oidc_callback(
             .cookie(clear_cookie("oidc_state"))
             .cookie(clear_cookie("oidc_nonce"))
             .cookie(clear_cookie("oidc_pkce_verifier"))
+            .cookie(clear_cookie("oidc_redirect"))
             .finish();
     }
 
@@ -298,24 +326,32 @@ pub async fn oidc_callback(
             Ok(_) => {
                 let token =
                     generate_token(&req, user_claims.id.clone(), user_claims.username.clone());
-                let frontend_url =
+
+                let mut frontend_url =
                     format!("{}/login?oidc_success=true", oidc_config.frontend_base_url);
+                if let Some(rt) = &redirect_target {
+                    frontend_url = format!("{}&redirect={}", frontend_url, encode(rt));
+                }
+
                 return HttpResponse::Found()
                     .append_header(("Location", frontend_url))
                     .cookie(create_auth_cookie(token))
                     .cookie(clear_cookie("oidc_state"))
                     .cookie(clear_cookie("oidc_nonce"))
                     .cookie(clear_cookie("oidc_pkce_verifier"))
+                    .cookie(clear_cookie("oidc_redirect"))
                     .finish();
             }
             Err(_e) => {
                 let frontend_url =
                     format!("{}/login?error=link_failed", oidc_config.frontend_base_url);
+
                 return HttpResponse::Found()
                     .append_header(("Location", frontend_url))
                     .cookie(clear_cookie("oidc_state"))
                     .cookie(clear_cookie("oidc_nonce"))
                     .cookie(clear_cookie("oidc_pkce_verifier"))
+                    .cookie(clear_cookie("oidc_redirect"))
                     .finish();
             }
         }
@@ -333,6 +369,7 @@ pub async fn oidc_callback(
         .cookie(clear_cookie("oidc_state"))
         .cookie(clear_cookie("oidc_nonce"))
         .cookie(clear_cookie("oidc_pkce_verifier"))
+        .cookie(clear_cookie("oidc_redirect"))
         .finish()
 }
 

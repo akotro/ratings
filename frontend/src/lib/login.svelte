@@ -123,7 +123,11 @@
   }
 
   async function oidcLogin() {
-    window.location.href = OIDC_LOGIN_ENDPOINT;
+    if (loginRedirectUrl) {
+      window.location.href = `${OIDC_LOGIN_ENDPOINT}?redirect=${encodeURIComponent(loginRedirectUrl)}`;
+    } else {
+      window.location.href = OIDC_LOGIN_ENDPOINT;
+    }
   }
 </script>
 
