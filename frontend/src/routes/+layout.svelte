@@ -19,7 +19,6 @@
   import { user } from '$lib/store';
   import { deleteCookies, getUserFromToken, readTokenCookie } from '$lib/auth';
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
   import Navigation from '$lib/navigation.svelte';
   import { NOTIFICATION_TOAST_DISMISSED, setupNotifications } from '$lib/notifications';
 
@@ -76,7 +75,6 @@
   function logout() {
     $user = null;
     deleteCookies();
-    goto('/');
   }
 
   const drawerStore = getDrawerStore();

@@ -16,6 +16,7 @@
 
   export let showRegister = true;
   export let loginRedirectUrl: string | null = null;
+  export let oidcError: string | null = null;
 
   let username = '';
   let password = '';
@@ -203,6 +204,9 @@
     {/if}
     {#if loginFailed}
       <p class="text-red-500">Operation failed. Please try again.</p>
+    {/if}
+    {#if oidcError}
+      <p class="text-red-500">Login with {OIDC_PROVIDER_NAME} failed: {oidcError}</p>
     {/if}
     <br />
     <br />

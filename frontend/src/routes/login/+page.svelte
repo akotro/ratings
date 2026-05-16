@@ -9,6 +9,7 @@
 
   let checkingAuth = true;
   let loginRedirectUrl: string | null = null;
+  let error: string | null = null;
 
   onMount(async () => {
     const token = readTokenCookie();
@@ -28,9 +29,10 @@
       }
     }
 
-    const error = urlParams.get('error');
+    error = urlParams.get('error');
     if (error) {
       console.error('OIDC Error:', error);
+
       window.history.replaceState({}, document.title, window.location.pathname);
       checkingAuth = false;
       return;
@@ -55,7 +57,7 @@
   {:else}
     <div class="space-y-10 text-center flex flex-col items-center">
       <h1 class="text-center text-6xl my-4">Login</h1>
-      <Login showRegister={false} {loginRedirectUrl} />
+      <Login showRegister={false} {loginRedirectUrl} oidcError={error} />
     </div>
   {/if}
 </div>
