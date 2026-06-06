@@ -2,6 +2,7 @@ import { env } from '$env/dynamic/public';
 
 export const API_BASE_URL = env.PUBLIC_API_BASE_URL;
 export const VAPID_PUBLIC_KEY = env.PUBLIC_VAPID_PUBLIC_KEY;
+export const COOKIE_DOMAIN = env.PUBLIC_COOKIE_DOMAIN || '';
 
 export const LOGIN_ENDPOINT = `${API_BASE_URL}/auth/login`;
 export const REGISTER_ENDPOINT = `${API_BASE_URL}/auth/register`;

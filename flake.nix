@@ -156,7 +156,6 @@
                 pkgs.just-lsp
                 pkgs.nix-fast-build
                 pkgs.nix-output-monitor
-                pkgs.pi-coding-agent
 
                 pkgs.pkg-config
                 pkgs.openssl

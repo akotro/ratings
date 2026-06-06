@@ -32,6 +32,7 @@ pub struct OidcConfig {
     pub issuer_url: String,
     pub redirect_url: String,
     pub frontend_base_url: String,
+    pub cookie_domain: Option<String>,
 }
 
 pub async fn build_oidc_config(app_config: &AppConfig) -> anyhow::Result<OidcConfig> {
@@ -57,6 +58,7 @@ pub async fn build_oidc_config(app_config: &AppConfig) -> anyhow::Result<OidcCon
         issuer_url: app_config.oidc_issuer_url.clone(),
         redirect_url: app_config.oidc_redirect_url.clone(),
         frontend_base_url: app_config.frontend_base_url.clone(),
+        cookie_domain: app_config.cookie_domain.clone(),
     })
 }
 
@@ -268,23 +270,31 @@ pub async fn oidc_callback(
         }
     };
 
+    let cookie_domain = oidc_config.cookie_domain.clone();
+
     let create_auth_cookie = |token: String| {
-        cookie::Cookie::build("token", token)
+        let mut b = cookie::Cookie::build("token", token)
             .path("/")
             .http_only(false)
             .secure(true)
-            .same_site(cookie::SameSite::Lax)
-            .finish()
+            .same_site(cookie::SameSite::Lax);
+        if let Some(d) = &cookie_domain {
+            b = b.domain(d.clone());
+        }
+        b.finish()
     };
 
     let create_color_cookie = |color: String| {
         let safe_color = urlencoding::encode(&color).into_owned();
-        cookie::Cookie::build("color", safe_color)
+        let mut b = cookie::Cookie::build("color", safe_color)
             .path("/")
             .http_only(false)
             .secure(true)
-            .same_site(cookie::SameSite::Lax)
-            .finish()
+            .same_site(cookie::SameSite::Lax);
+        if let Some(d) = &cookie_domain {
+            b = b.domain(d.clone());
+        }
+        b.finish()
     };
 
     let clear_cookie = |name: &'static str| {

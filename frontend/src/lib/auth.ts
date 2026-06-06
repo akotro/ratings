@@ -1,6 +1,9 @@
 import { jwtDecode } from 'jwt-decode';
 import type { GroupMembership, User } from './models';
 import { NOTIFICATION_TOAST_DISMISSED } from './notifications';
+import { COOKIE_DOMAIN } from './endpoints';
+
+const domainAttr = COOKIE_DOMAIN ? `; domain=${COOKIE_DOMAIN}` : '';
 
 function getCookieValue(name: string): string | null {
   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -9,7 +12,10 @@ function getCookieValue(name: string): string | null {
 }
 
 function eraseCookie(name: string) {
-  document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
+  document.cookie = `${name}=; path=/${domainAttr}; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
+  if (domainAttr) {
+    document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT;`;
+  }
 }
 
 export function setUserCookies(token: string, color: string) {
@@ -18,16 +24,16 @@ export function setUserCookies(token: string, color: string) {
 }
 
 export function setTokenCookie(value: string) {
-  document.cookie = `token=${encodeURIComponent(value)}; path=/`;
+  document.cookie = `token=${encodeURIComponent(value)}; path=/${domainAttr}`;
 }
 
 export function setColorCookie(color: string) {
-  document.cookie = `color=${encodeURIComponent(color)}; path=/`;
+  document.cookie = `color=${encodeURIComponent(color)}; path=/${domainAttr}`;
 }
 
 export function setGroupCookie(group: GroupMembership) {
   const groupString = JSON.stringify(group);
-  document.cookie = `group=${encodeURIComponent(groupString)}; path=/`;
+  document.cookie = `group=${encodeURIComponent(groupString)}; path=/${domainAttr}`;
 }
 
 export function readTokenCookie(): string | null {
