@@ -6,6 +6,11 @@ use uuid::Uuid;
 
 use crate::{auth, db_models::*, db_util, models::*};
 
+#[get("/health")]
+async fn health_route() -> HttpResponse {
+    HttpResponse::Ok().json(ApiResponse::success("ok"))
+}
+
 #[post("/register")]
 async fn register_user_route(
     pool: web::Data<MySqlPool>,

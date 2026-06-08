@@ -56,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
                     .app_data(secret_key.clone())
                     .app_data(Data::new(oidc_config.clone()))
                     .app_data(web::JsonConfig::default().error_handler(json_error_handler))
+                    .service(health_route)
                     .service(get_users_route)
                     .service(get_user_oidc_links_route)
                     .service(unlink_oidc_route)
