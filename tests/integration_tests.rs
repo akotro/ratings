@@ -231,6 +231,170 @@ async fn test_update_user_no_token(pool: MySqlPool) {
     assert_eq!(resp.status(), 401, "should return 401 without auth");
 }
 
+async fn seed_user_password(pool: &MySqlPool, user_id: &str, plain: &str) {
+    let hash = ratings_lib::auth::generate_password_hash(plain.to_string()).expect("hash password");
+    sqlx::query!("UPDATE users SET password = ? WHERE id = ?", hash, user_id)
+        .execute(pool)
+        .await
+        .expect("seed password");
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_change_password_success(pool: MySqlPool) {
+    seed_user_password(&pool, "test_id", "old_pw").await;
+
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool.clone()))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(change_password_route),
+    )
+    .await;
+
+    let payload = serde_json::json!({"old_password": "old_pw", "new_password": "new_pw"});
+    let req = test::TestRequest::post()
+        .uri("/users/test_id/password")
+        .set_payload(serde_json::to_string(&payload).unwrap())
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id", "test_username")),
+        ))
+        .insert_header((header::CONTENT_TYPE, "application/json"))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert!(
+        resp.status().is_success(),
+        "change password: {}",
+        resp.status()
+    );
+
+    let new_hash: String = sqlx::query_scalar!("SELECT password FROM users WHERE id = 'test_id'")
+        .fetch_one(&pool)
+        .await
+        .expect("fetch new hash");
+    assert!(
+        ratings_lib::auth::validate_password(&new_hash, "new_pw"),
+        "new password should verify against new hash"
+    );
+    assert!(
+        !ratings_lib::auth::validate_password(&new_hash, "old_pw"),
+        "old password should no longer verify"
+    );
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_change_password_wrong_old(pool: MySqlPool) {
+    seed_user_password(&pool, "test_id", "old_pw").await;
+
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(change_password_route),
+    )
+    .await;
+
+    let payload = serde_json::json!({"old_password": "wrong", "new_password": "new_pw"});
+    let req = test::TestRequest::post()
+        .uri("/users/test_id/password")
+        .set_payload(serde_json::to_string(&payload).unwrap())
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id", "test_username")),
+        ))
+        .insert_header((header::CONTENT_TYPE, "application/json"))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401, "wrong old pw should be 401");
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_change_password_no_token(pool: MySqlPool) {
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(change_password_route),
+    )
+    .await;
+
+    let payload = serde_json::json!({"old_password": "x", "new_password": "y"});
+    let req = test::TestRequest::post()
+        .uri("/users/test_id/password")
+        .set_payload(serde_json::to_string(&payload).unwrap())
+        .insert_header((header::CONTENT_TYPE, "application/json"))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 401, "no token should be 401");
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_change_password_forbidden_other_user(pool: MySqlPool) {
+    seed_user_password(&pool, "test_id", "old_pw").await;
+
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(change_password_route),
+    )
+    .await;
+
+    let payload = serde_json::json!({"old_password": "old_pw", "new_password": "new_pw"});
+    let req = test::TestRequest::post()
+        .uri("/users/test_id/password")
+        .set_payload(serde_json::to_string(&payload).unwrap())
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id2", "test_username2")),
+        ))
+        .insert_header((header::CONTENT_TYPE, "application/json"))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 403, "other user should be forbidden");
+}
+
+#[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
+async fn test_change_password_empty_new(pool: MySqlPool) {
+    seed_user_password(&pool, "test_id", "old_pw").await;
+
+    let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));
+    let app = test::init_service(
+        App::new()
+            .app_data(Data::new(pool))
+            .app_data(Data::new(SECRET.to_string()))
+            .app_data(Data::new(ip_blacklist))
+            .service(change_password_route),
+    )
+    .await;
+
+    let payload = serde_json::json!({"old_password": "old_pw", "new_password": ""});
+    let req = test::TestRequest::post()
+        .uri("/users/test_id/password")
+        .set_payload(serde_json::to_string(&payload).unwrap())
+        .insert_header((
+            header::AUTHORIZATION,
+            format!("Bearer {}", token("test_id", "test_username")),
+        ))
+        .insert_header((header::CONTENT_TYPE, "application/json"))
+        .peer_addr(peer_addr())
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), 400, "empty new pw should be 400");
+}
+
 #[sqlx::test(fixtures(path = "../fixtures", scripts("users")))]
 async fn test_delete_user(pool: MySqlPool) {
     let ip_blacklist: IpBlacklist = Arc::new(Mutex::new(Vec::new()));

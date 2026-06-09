@@ -19,6 +19,12 @@ pub struct NewUser {
     pub color: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct ChangePassword {
+    pub old_password: String,
+    pub new_password: String,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DbGroup {
     pub id: String,

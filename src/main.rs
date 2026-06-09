@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
                     .service(get_user_oidc_links_route)
                     .service(unlink_oidc_route)
                     .service(update_user_route)
+                    .service(change_password_route)
                     .service(delete_user_route)
                     .service(create_group_route)
                     .service(join_group_route)

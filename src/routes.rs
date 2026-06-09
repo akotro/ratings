@@ -203,6 +203,73 @@ async fn update_user_route(
     }
 }
 
+#[post("/users/{id}/password")]
+async fn change_password_route(
+    pool: web::Data<MySqlPool>,
+    req: HttpRequest,
+    id: web::Path<String>,
+    payload: web::Json<ChangePassword>,
+) -> HttpResponse {
+    if let Err(err) = auth::validate_ip(&req) {
+        return err;
+    }
+
+    let user_claims = match auth::validate_token(&req) {
+        Ok(claims) => claims,
+        Err(err) => return err,
+    };
+    let user_id = id.into_inner();
+    if user_claims.id != user_id {
+        return HttpResponse::Forbidden().json(ApiResponse::<()>::error("Unauthorized".into()));
+    }
+
+    if payload.new_password.is_empty() {
+        return HttpResponse::BadRequest().json(ApiResponse::<()>::error(
+            "New password cannot be empty".into(),
+        ));
+    }
+
+    let mut conn = match db_util::get_connection(&pool).await {
+        Some(conn) => conn,
+        None => {
+            return HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error("DB Error".into()));
+        }
+    };
+
+    let stored_hash = match db_util::get_user_password_hash(&mut conn, &user_id).await {
+        Ok(Some(hash)) => hash,
+        Ok(None) => {
+            return HttpResponse::NotFound()
+                .json(ApiResponse::<()>::error("User not found".into()));
+        }
+        Err(error) => {
+            return HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(error.to_string()));
+        }
+    };
+
+    if !auth::validate_password(&stored_hash, &payload.old_password) {
+        return HttpResponse::Unauthorized()
+            .json(ApiResponse::<()>::error("Invalid current password".into()));
+    }
+
+    let new_hash = match auth::generate_password_hash(payload.new_password.clone()) {
+        Ok(hash) => hash,
+        Err(error) => {
+            return HttpResponse::InternalServerError()
+                .json(ApiResponse::<()>::error(error.to_string()));
+        }
+    };
+
+    match db_util::update_user_password(&mut conn, &user_id, &new_hash).await {
+        Ok(_) => HttpResponse::Ok().json(ApiResponse::success(true)),
+        Err(error) => {
+            HttpResponse::InternalServerError().json(ApiResponse::<()>::error(error.to_string()))
+        }
+    }
+}
+
 #[delete("/users/{id}")]
 async fn delete_user_route(
     pool: web::Data<MySqlPool>,

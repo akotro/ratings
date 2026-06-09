@@ -377,6 +377,31 @@ pub async fn delete_user(conn: &mut MySqlConnection, user_id: &str) -> Result<My
     Ok(result)
 }
 
+pub async fn get_user_password_hash(
+    conn: &mut MySqlConnection,
+    user_id: &str,
+) -> Result<Option<String>> {
+    let row = sqlx::query!("SELECT password FROM users WHERE id = ?", user_id)
+        .fetch_optional(conn)
+        .await?;
+    Ok(row.map(|r| r.password))
+}
+
+pub async fn update_user_password(
+    conn: &mut MySqlConnection,
+    user_id: &str,
+    new_hash: &str,
+) -> Result<MySqlQueryResult> {
+    let result = sqlx::query!(
+        "UPDATE users SET password = ? WHERE id = ?",
+        new_hash,
+        user_id
+    )
+    .execute(conn)
+    .await?;
+    Ok(result)
+}
+
 // NOTE: Push Notifications
 
 pub fn init_push_notifications(
@@ -2036,6 +2061,45 @@ mod tests {
 
         let query_result = delete_user_result?;
         assert_eq!(query_result.rows_affected(), 1);
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_get_user_password_hash(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let get_user_password_hash_result = get_user_password_hash(&mut conn, USER_ID_1).await;
+        assert!(get_user_password_hash_result.is_ok());
+
+        let password_hash = get_user_password_hash_result?;
+        assert!(password_hash.is_some());
+        assert_eq!(password_hash.unwrap(), "test_password");
+
+        Ok(())
+    }
+
+    #[sqlx::test(fixtures(path = "./../fixtures", scripts("users")))]
+    async fn test_update_user_password(pool: MySqlPool) -> Result<()> {
+        let mut conn = get_connection(&pool)
+            .await
+            .ok_or(anyhow!("Failed to get connection."))?;
+
+        let update_user_password_result =
+            update_user_password(&mut conn, USER_ID_1, "new_password_hash").await;
+        assert!(update_user_password_result.is_ok());
+
+        let query_result = update_user_password_result?;
+        assert_eq!(query_result.rows_affected(), 1);
+
+        let get_user_password_hash_result = get_user_password_hash(&mut conn, USER_ID_1).await;
+        assert!(get_user_password_hash_result.is_ok());
+
+        let password_hash = get_user_password_hash_result?;
+        assert!(password_hash.is_some());
+        assert_eq!(password_hash.unwrap(), "new_password_hash");
 
         Ok(())
     }
