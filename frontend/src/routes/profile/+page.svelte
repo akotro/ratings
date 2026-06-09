@@ -4,6 +4,7 @@
   import { deleteCookies, getUserFromToken, readTokenCookie } from '$lib/auth';
   import {
     UPDATE_USER_ENDPOINT,
+    CHANGE_PASSWORD_ENDPOINT,
     OIDC_LOGIN_ENDPOINT,
     OIDC_LINK_ENDPOINT,
     GET_USER_OIDC_LINKS_ENDPOINT,
@@ -24,6 +25,13 @@
   let updateLoading = false;
   let updateFailed = false;
   let checkingAuth = true;
+
+  let oldPassword = '';
+  let newPassword = '';
+  let confirmPassword = '';
+  let passwordLoading = false;
+  let passwordError = '';
+  let passwordSuccess = false;
 
   let notificationDismissed: string | null = null;
   let showNotificationSettings = false;
@@ -152,6 +160,50 @@
     $user = null;
     deleteCookies();
     goto('/');
+  }
+
+  async function changePassword() {
+    passwordError = '';
+    passwordSuccess = false;
+
+    if (!$user || $user.token.length === 0) return;
+
+    if (newPassword.length === 0) {
+      passwordError = 'New password cannot be empty.';
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      passwordError = 'New passwords do not match.';
+      return;
+    }
+
+    passwordLoading = true;
+    try {
+      const response = await axios.post(
+        CHANGE_PASSWORD_ENDPOINT($user.id),
+        { old_password: oldPassword, new_password: newPassword },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + $user.token
+          }
+        }
+      );
+      if (response.data && response.data.success) {
+        passwordSuccess = true;
+        oldPassword = '';
+        newPassword = '';
+        confirmPassword = '';
+        setTimeout(() => logout(), 1500);
+      } else {
+        passwordError = response.data?.message || 'Failed to change password.';
+      }
+    } catch (err: any) {
+      passwordError =
+        err?.response?.data?.message ||
+        (err?.response?.status === 401 ? 'Invalid current password.' : 'Failed to change password.');
+    }
+    passwordLoading = false;
   }
 
   function startOidcLogin() {
@@ -349,6 +401,57 @@
       {#if updateFailed}
         <p class="text-red-500">Operation failed. Please try again.</p>
       {/if}
+
+      <br />
+
+      <div class="card p-4 w-full max-w-md">
+        <h3 class="text-xl mb-4 text-center">Change Password</h3>
+        <div class="flex flex-col gap-2">
+          <label class="label">
+            <span>Current password</span>
+            <input
+              class="input w-full"
+              type="password"
+              autocomplete="current-password"
+              bind:value={oldPassword}
+            />
+          </label>
+          <label class="label">
+            <span>New password</span>
+            <input
+              class="input w-full"
+              type="password"
+              autocomplete="new-password"
+              bind:value={newPassword}
+            />
+          </label>
+          <label class="label">
+            <span>Confirm new password</span>
+            <input
+              class="input w-full"
+              type="password"
+              autocomplete="new-password"
+              bind:value={confirmPassword}
+            />
+          </label>
+          <button
+            on:click={changePassword}
+            disabled={passwordLoading}
+            class="btn variant-filled-secondary mt-2"
+          >
+            {#if passwordLoading}
+              <Loading />
+            {/if}
+            Change Password
+          </button>
+          {#if passwordError}
+            <p class="text-red-500 text-center">{passwordError}</p>
+          {/if}
+          {#if passwordSuccess}
+            <p class="text-green-500 text-center">Password changed. Logging out...</p>
+          {/if}
+        </div>
+      </div>
 
       <br />
 

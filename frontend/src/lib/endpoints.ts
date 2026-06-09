@@ -16,6 +16,9 @@ export const OIDC_LINK_ENDPOINT = `${API_BASE_URL}/auth/oidc/link`;
 export function UPDATE_USER_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/users/${userId}`;
 }
+export function CHANGE_PASSWORD_ENDPOINT(userId: string) {
+  return `${API_BASE_URL}/users/${userId}/password`;
+}
 
 export function GET_GROUP_MEMBERSHIPS_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/groups/${userId}`;
