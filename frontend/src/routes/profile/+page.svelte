@@ -1,10 +1,11 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
-  import { page } from '$app/stores';
+  import { page } from '$app/state';
   import { deleteCookies, getUserFromToken, readTokenCookie } from '$lib/auth';
   import {
     UPDATE_USER_ENDPOINT,
     CHANGE_PASSWORD_ENDPOINT,
+    DELETE_USER_ENDPOINT,
     OIDC_LOGIN_ENDPOINT,
     OIDC_LINK_ENDPOINT,
     GET_USER_OIDC_LINKS_ENDPOINT,
@@ -32,6 +33,10 @@
   let passwordLoading = false;
   let passwordError = '';
   let passwordSuccess = false;
+
+  let showDeleteConfirm = false;
+  let deleteLoading = false;
+  let deleteError = '';
 
   let notificationDismissed: string | null = null;
   let showNotificationSettings = false;
@@ -201,9 +206,30 @@
     } catch (err: any) {
       passwordError =
         err?.response?.data?.message ||
-        (err?.response?.status === 401 ? 'Invalid current password.' : 'Failed to change password.');
+        (err?.response?.status === 401
+          ? 'Invalid current password.'
+          : 'Failed to change password.');
     }
     passwordLoading = false;
+  }
+
+  async function deleteUser() {
+    if (!$user || $user.token.length === 0) return;
+    deleteError = '';
+    deleteLoading = true;
+    try {
+      const response = await axios.delete(DELETE_USER_ENDPOINT($user.id), {
+        headers: { Authorization: 'Bearer ' + $user.token }
+      });
+      if (response.data && response.data.success) {
+        logout();
+      } else {
+        deleteError = response.data?.message || 'Failed to delete account.';
+      }
+    } catch (err: any) {
+      deleteError = err?.response?.data?.message || 'Failed to delete account.';
+    }
+    deleteLoading = false;
   }
 
   function startOidcLogin() {
@@ -314,6 +340,22 @@
 
       <br />
 
+      {#if updateLoading}
+        <button on:click={updateUser} class="btn btn-lg variant-filled-secondary">
+          <Loading />
+          Update Profile
+        </button>
+      {:else}
+        <button on:click={updateUser} class="btn btn-lg variant-filled-secondary">
+          Update Profile
+        </button>
+      {/if}
+      {#if updateFailed}
+        <p class="text-red-500">Operation failed. Please try again.</p>
+      {/if}
+
+      <br />
+
       <div class="card p-4 w-full max-w-md">
         <h3 class="text-xl mb-4 text-center">Connected Accounts</h3>
 
@@ -388,22 +430,6 @@
 
       <br />
 
-      {#if updateLoading}
-        <button on:click={updateUser} class="btn btn-lg variant-filled-secondary">
-          <Loading />
-          Update Profile
-        </button>
-      {:else}
-        <button on:click={updateUser} class="btn btn-lg variant-filled-secondary">
-          Update Profile
-        </button>
-      {/if}
-      {#if updateFailed}
-        <p class="text-red-500">Operation failed. Please try again.</p>
-      {/if}
-
-      <br />
-
       <div class="card p-4 w-full max-w-md">
         <h3 class="text-xl mb-4 text-center">Change Password</h3>
         <div class="flex flex-col gap-2">
@@ -455,6 +481,45 @@
 
       <br />
 
+      <div class="card p-4 w-full max-w-md variant-soft-error">
+        <!-- <h3 class="text-xl mb-4 text-center">Delete Account</h3> -->
+        {#if showDeleteConfirm}
+          <p class="text-center mb-4">
+            This will permanently delete your account. This action cannot be undone.
+          </p>
+          <div class="flex justify-center gap-2">
+            <button on:click={deleteUser} disabled={deleteLoading} class="btn variant-filled-error">
+              {#if deleteLoading}
+                <Loading />
+              {/if}
+              Yes, delete my account
+            </button>
+            <button
+              on:click={() => {
+                showDeleteConfirm = false;
+                deleteError = '';
+              }}
+              disabled={deleteLoading}
+              class="btn variant-ghost"
+            >
+              Cancel
+            </button>
+          </div>
+        {:else}
+          <button
+            on:click={() => (showDeleteConfirm = true)}
+            class="btn variant-filled-error w-full"
+          >
+            Delete Account
+          </button>
+        {/if}
+        {#if deleteError}
+          <p class="text-red-500 text-center mt-2">{deleteError}</p>
+        {/if}
+      </div>
+
+      <br />
+
       {#if showNotificationSettings}
         <h2 class="text-center text-4xl my-4">Notification Settings</h2>
 
@@ -480,7 +545,7 @@
   {:else if $user == null || $user.token == null}
     <h1 class="p-6 text-8xl text-white text-center">
       Please <a
-        href={$page ? `/login?redirect=${$page.route.id}` : '/'}
+        href={page ? `/login?redirect=${page.route.id}` : '/'}
         class="hover:underline dark:text-blue-500">Login</a
       >
     </h1>

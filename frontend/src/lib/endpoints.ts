@@ -19,6 +19,9 @@ export function UPDATE_USER_ENDPOINT(userId: string) {
 export function CHANGE_PASSWORD_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/users/${userId}/password`;
 }
+export function DELETE_USER_ENDPOINT(userId: string) {
+  return `${API_BASE_URL}/users/${userId}`;
+}
 
 export function GET_GROUP_MEMBERSHIPS_ENDPOINT(userId: string) {
   return `${API_BASE_URL}/groups/${userId}`;
