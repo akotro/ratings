@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    runs-on: nixos
+    runs-on: [nixos, tithe]
     steps:
       - uses: https://git.akotro.dev/actions/checkout@v6
         with:
