@@ -9,7 +9,7 @@ jobs:
   update-flake-inputs:
     runs-on: nixos
     steps:
-      - uses: https://git.akotro.dev/actions/checkout@v6
+      - uses: https://git.akotro.dev/actions/checkout@v7
         with:
           persist-credentials: false
 
