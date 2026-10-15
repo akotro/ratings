@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT password FROM users WHERE id = 'test_id'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "password",
+        "type_info": {
+          "type": "Blob",
+          "flags": "NOT_NULL | BLOB | NO_DEFAULT_VALUE",
+          "max_size": 262140
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "07a9b6e3b6dcf2939e1d8e665e7d4c6f72b74352e57e2a390b9b993534759b59"
+}

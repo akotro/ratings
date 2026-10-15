@@ -1,0 +1,24 @@
+{
+  "db_name": "MySQL",
+  "query": "SELECT id FROM restaurants WHERE group_id = 'test_group_id1' AND restaurant_code = 'ARMYRA BY PAPAIOANNOU'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": {
+          "type": "Long",
+          "flags": "NOT_NULL | PRIMARY_KEY | AUTO_INCREMENT",
+          "max_size": 11
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "99f8ad81d59c8408641c4cfc2462dc7d80555d879166b7bcaf07fba59938d32f"
+}

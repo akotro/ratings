@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -10,15 +10,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     crane.url = "github:ipetkov/crane";
-    devenv = {
-      url = "github:cachix/devenv";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-  };
-
-  nixConfig = {
-    extra-trusted-public-keys = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw=";
-    extra-substituters = "https://devenv.cachix.org";
   };
 
   outputs =
@@ -26,14 +17,9 @@
     flake-parts.lib.mkFlake { inherit inputs; } (
       { self, ... }:
       {
-        imports = [
-          inputs.devenv.flakeModule
-        ];
-
         systems = [
           "x86_64-linux"
           "aarch64-linux"
-          "x86_64-darwin"
           "aarch64-darwin"
         ];
 
@@ -64,6 +50,7 @@
                 (craneLib.fileset.commonCargoSources unfilteredRoot)
                 ./migrations
                 ./.sqlx
+                ./fixtures
               ];
             };
 
@@ -99,6 +86,31 @@
                 preBuild = ''
                   export SQLX_OFFLINE=true
                   export SQLX_OFFLINE_DIR=${craneLib.path ./.sqlx}
+                '';
+              }
+            );
+
+            # `#[sqlx::test]` needs a live server, so the tests are only compiled here and run in
+            # `vm-test`.
+            ratings-tests = craneLib.mkCargoDerivation (
+              commonArgs
+              // {
+                inherit cargoArtifacts;
+                pnameSuffix = "-tests";
+
+                nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [ pkgs.jq ];
+
+                SQLX_OFFLINE = "true";
+                doInstallCargoArtifacts = false;
+
+                buildPhaseCargoCommand = ''
+                  cargo test --release --locked --no-run --message-format=json-render-diagnostics \
+                    | jq -r 'select(.profile.test == true) | .executable' > test-executables
+                '';
+
+                installPhaseCommand = ''
+                  mkdir -p $out/bin
+                  xargs -I{} install -m755 {} $out/bin < test-executables
                 '';
               }
             );
@@ -141,6 +153,35 @@
 
             checks = {
               inherit ratings frontend;
+              # What `just test` runs, minus doctests, which cannot be run from a prebuilt binary.
+              vm-test = pkgs.testers.nixosTest {
+                name = "ratings-tests";
+
+                nodes.machine = {
+                  services.mysql = {
+                    enable = true;
+                    package = pkgs.mariadb;
+                    ensureDatabases = [ "ratings" ];
+                    # sqlx cannot do `unix_socket` auth, which `ensureUsers` sets up. Global
+                    # privileges because `#[sqlx::test]` creates a database per test.
+                    initialScript = pkgs.writeText "ratings-test-user.sql" ''
+                      CREATE USER 'ratings'@'localhost' IDENTIFIED BY 'ratings';
+                      GRANT ALL PRIVILEGES ON *.* TO 'ratings'@'localhost';
+                    '';
+                  };
+                };
+
+                testScript = ''
+                  machine.wait_for_unit("mysql.service")
+                  # TCP, since over the socket sqlx fails closing its setup connection (EPIPE).
+                  machine.wait_for_open_port(3306)
+                  machine.succeed(
+                      "export DATABASE_URL=mysql://ratings:ratings@127.0.0.1/ratings "
+                      "&& for t in ${ratings-tests}/bin/*; do $t || exit 1; done",
+                      timeout=900,
+                  )
+                '';
+              };
               default = full;
             };
 
@@ -149,8 +190,7 @@
               default = full;
             };
 
-            devenv.shells.default = {
-              # https://devenv.sh/reference/options/
+            devShells.default = pkgs.mkShell {
               packages = [
                 pkgs.just
                 pkgs.just-lsp
@@ -170,6 +210,7 @@
                 pkgs.cargo-outdated
                 pkgs.sqlx-cli
                 pkgs.libmysqlclient.dev
+                pkgs.mariadb # `just up`
 
                 pkgs.nodejs
                 pkgs.svelte-language-server
@@ -181,48 +222,8 @@
                 pkgs.taplo
               ];
 
-              env = {
-                CODELLDB_PATH = "${pkgs.vscode-extensions.vadimcn.vscode-lldb}/share/vscode/extensions/vadimcn.vscode-lldb/adapter/codelldb";
-                DATABASE_URL = "mysql://root@127.0.0.1:3306/ratings";
-              };
-
-              services = {
-                mysql = {
-                  enable = true;
-                  package = pkgs.mariadb;
-                  settings.mysqld = {
-                    bind-address = "127.0.0.1";
-                    user = "root";
-                  };
-                  initialDatabases = [
-                    { name = "ratings"; }
-                  ];
-                  ensureUsers = [
-                    {
-                      name = "root";
-                      ensurePermissions = {
-                        "*.*" = "ALL PRIVILEGES";
-                      };
-                    }
-                  ];
-                };
-              };
-
-              processes = {
-                migrate = {
-                  exec = # bash
-                    ''
-                      echo "Creating database if it doesn't exist..."
-                      ${lib.getExe pkgs.sqlx-cli} database create
-
-                      echo "Running migrations..."
-                      ${lib.getExe pkgs.sqlx-cli} migrate run
-
-                      echo "Finished migrations!"
-                    '';
-                  after = [ "devenv:processes:mysql@ready" ];
-                };
-              };
+              CODELLDB_PATH = "${pkgs.vscode-extensions.vadimcn.vscode-lldb}/share/vscode/extensions/vadimcn.vscode-lldb/adapter/codelldb";
+              DATABASE_URL = "mysql://root@127.0.0.1:3306/ratings";
             };
           };
       }

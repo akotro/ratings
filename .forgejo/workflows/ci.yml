@@ -7,13 +7,6 @@ on:
     branches: ["dev", "main"]
   workflow_dispatch:
 
-env:
-  CARGO_TERM_COLOR: always
-  JWT_SECRET: ${{ secrets.JWT_SECRET }}
-  PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.PUBLIC_VAPID_PUBLIC_KEY }}
-  VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-  DATABASE_URL: mysql://root@127.0.0.1:3306/ratings
-
 jobs:
   build:
     runs-on: [nix-ci]
@@ -31,52 +24,7 @@ jobs:
 
       - name: Build
         run: |
-          nix develop --no-pure-eval --accept-flake-config --command \
+          nix develop --accept-flake-config --command \
             nix-fast-build --skip-cached --eval-workers=1 --no-nom
           cat $FORGEJO_STEP_SUMMARY
 
-  test:
-    needs: [build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: https://git.akotro.dev/actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Configure git
-        run: |
-          echo "https://akotro:${{ secrets.FJ_TOKEN }}@git.akotro.dev" > ~/.git-credentials
-          git config --global credential.helper store
-          git config --global user.name "forgejo-bot"
-          git config --global user.email "forgejo@users.noreply.git"
-
-      - name: Install Lix
-        uses: https://github.com/samueldr/lix-gha-installer-action@f5e94192f565f53d84f41a056956dc0d3183b343
-        with:
-          github_access_token: ${{ secrets.GH_TOKEN }}
-          extra_nix_config: |
-            substituters = https://cache.nixos.org/?priority=1 https://cache.hoshiko.int.akotro.dev?priority=2 https://cache.tithe.int.akotro.dev?priority=3 https://nix-community.cachix.org?priority=10 https://hyprland.cachix.org?priority=11 https://noctalia.cachix.org?priority=12
-            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= cache.hoshiko.int.akotro.dev:JSvDNhMvWK3ilq5Op47wrZU1CW21VVFuU2bO0ngBxIM= cache.int.akotro.dev:AlpF5nJ/dy5/l9mTspINE25vIlVc6zY43M0ayGodXd0= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc= noctalia.cachix.org-1:pCOR47nnMEo5thcxNDtzWpOxNFQsBRglJzxWPp3dkU4=
-            experimental-features = nix-command flakes
-            accept-flake-config = true
-            access-tokens = github.com=${{ secrets.GH_TOKEN }} git.akotro.dev=${{ secrets.FJ_TOKEN }}
-
-      - name: Setup Devenv
-        run: nix develop --no-pure-eval --command devenv up -D
-
-      - name: Wait for devenv up
-        run: sleep 30
-
-      # - name: Print MySQL and Migrate logs
-      #   run: |
-      #     nix develop --no-pure-eval --command process-compose process logs mysql
-      #     nix develop --no-pure-eval --command process-compose process logs migrate
-      #
-      # - name: Print Process Compose logs
-      #   run: cat /tmp/process-compose-*.log
-
-      - name: Build
-        run: nix develop --no-pure-eval --command cargo build
-
-      - name: Test
-        run: nix develop --no-pure-eval --command cargo test
